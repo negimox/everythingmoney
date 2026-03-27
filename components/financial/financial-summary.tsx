@@ -7,100 +7,47 @@ import {
   PiggyBank,
   BarChart3,
   Banknote,
+  ShieldCheck,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 
 interface FinancialSummaryProps {
   data: any[];
 }
 
-// Map FI types to readable labels and icons
+// FI type configuration
 const FI_TYPE_CONFIG: Record<
   string,
   { label: string; icon: typeof Landmark; color: string }
 > = {
-  DEPOSIT: {
-    label: "Bank Accounts",
-    icon: Landmark,
-    color: "text-blue-500 bg-blue-500/10",
-  },
-  deposit: {
-    label: "Bank Accounts",
-    icon: Landmark,
-    color: "text-blue-500 bg-blue-500/10",
-  },
-  MUTUAL_FUNDS: {
-    label: "Mutual Funds",
-    icon: TrendingUp,
-    color: "text-emerald-500 bg-emerald-500/10",
-  },
-  EQUITIES: {
-    label: "Equities",
-    icon: BarChart3,
-    color: "text-violet-500 bg-violet-500/10",
-  },
-  ETF: {
-    label: "ETFs",
-    icon: PiggyBank,
-    color: "text-amber-500 bg-amber-500/10",
-  },
-  INSURANCE_POLICIES: {
-    label: "Insurance",
-    icon: Banknote,
-    color: "text-rose-500 bg-rose-500/10",
-  },
-  insurance_policies: {
-    label: "Insurance",
-    icon: Banknote,
-    color: "text-rose-500 bg-rose-500/10",
-  },
-  general_insurance: {
-    label: "General Insurance",
-    icon: Banknote,
-    color: "text-rose-500 bg-rose-500/10",
-  },
-  life_insurance: {
-    label: "Life Insurance",
-    icon: Banknote,
-    color: "text-pink-500 bg-pink-500/10",
-  },
-  TERM_DEPOSIT: {
-    label: "Fixed Deposits",
-    icon: Landmark,
-    color: "text-teal-500 bg-teal-500/10",
-  },
-  term_deposit: {
-    label: "Fixed Deposits",
-    icon: Landmark,
-    color: "text-teal-500 bg-teal-500/10",
-  },
-  recurring_deposit: {
-    label: "Recurring Deposits",
-    icon: Landmark,
-    color: "text-cyan-500 bg-cyan-500/10",
-  },
-  SIP: {
-    label: "SIP",
-    icon: TrendingUp,
-    color: "text-indigo-500 bg-indigo-500/10",
-  },
-  nps: {
-    label: "NPS",
-    icon: PiggyBank,
-    color: "text-orange-500 bg-orange-500/10",
-  },
-  savings: {
-    label: "Savings Accounts",
-    icon: Landmark,
-    color: "text-blue-500 bg-blue-500/10",
-  },
-  current: {
-    label: "Current Accounts",
-    icon: Landmark,
-    color: "text-slate-500 bg-slate-500/10",
-  },
+  deposit: { label: "Savings & Current", icon: Landmark, color: "text-blue-500 bg-blue-500/10" },
+  term_deposit: { label: "Fixed Deposits", icon: Landmark, color: "text-teal-500 bg-teal-500/10" },
+  recurring_deposit: { label: "Recurring Deposits", icon: RefreshCw, color: "text-cyan-500 bg-cyan-500/10" },
+  mutual_funds: { label: "Mutual Funds", icon: TrendingUp, color: "text-emerald-500 bg-emerald-500/10" },
+  equities: { label: "Equities", icon: BarChart3, color: "text-violet-500 bg-violet-500/10" },
+  etf: { label: "ETFs", icon: PiggyBank, color: "text-amber-500 bg-amber-500/10" },
+  insurance_policies: { label: "Insurance", icon: ShieldCheck, color: "text-rose-500 bg-rose-500/10" },
+  general_insurance: { label: "General Insurance", icon: ShieldCheck, color: "text-rose-500 bg-rose-500/10" },
+  life_insurance: { label: "Life Insurance", icon: ShieldCheck, color: "text-pink-500 bg-pink-500/10" },
+  nps: { label: "NPS", icon: PiggyBank, color: "text-orange-500 bg-orange-500/10" },
+  sip: { label: "SIP", icon: TrendingUp, color: "text-indigo-500 bg-indigo-500/10" },
+  gstr1_3b: { label: "GST Returns", icon: Banknote, color: "text-gray-500 bg-gray-500/10" },
+  bonds: { label: "Bonds", icon: Landmark, color: "text-sky-500 bg-sky-500/10" },
 };
+
+// Insurance transaction types categorized
+const INSURANCE_INFLOW_TYPES = new Set([
+  "BONUS", "MONEY_BACK", "CLAIM", "FINAL_SETTLEMENT",
+]);
+const INSURANCE_OUTFLOW_TYPES = new Set([
+  "PREMIUM_PAYMENT", "LATE_FEES", "INSURANCE_RENEWWAL", "PLAN_CHANGE",
+]);
+
+// MF transaction type categorization
+const MF_INFLOW_TYPES = new Set(["SELL", "DIVIDEND", "REDEMPTION"]);
+const MF_OUTFLOW_TYPES = new Set(["BUY", "PURCHASE", "SIP"]);
 
 function formatCurrency(value: string | number | undefined | null): string {
   if (value === undefined || value === null || value === "") return "—";
@@ -110,95 +57,117 @@ function formatCurrency(value: string | number | undefined | null): string {
 }
 
 /**
- * Helper: safely get a nested value from an object, trying both lowercase and PascalCase keys.
- * SETU returns lowercase (profile, holders) but we also handle PascalCase for flexibility.
- */
-function getField(obj: any, ...keys: string[]): any {
-  if (!obj) return undefined;
-  let current = obj;
-  for (const key of keys) {
-    if (!current || typeof current !== "object") return undefined;
-    // Try exact key first, then lowercase, then PascalCase
-    current =
-      current[key] ??
-      current[key.toLowerCase()] ??
-      current[key.charAt(0).toUpperCase() + key.slice(1)] ??
-      undefined;
-  }
-  return current;
-}
-
-/**
- * Normalize a SETU account entry into a consistent shape.
- * SETU nests data as: { data: { account: { type, profile, summary, transactions } } }
+ * Normalize a SETU account entry.
+ * SETU nests: { maskedAccNumber, linkRefNumber, data: { account: { type, profile, summary, transactions } } }
  */
 function normalizeAccount(rawAccount: any) {
-  // The actual account data can be at rawAccount.data.account or rawAccount.account
-  const accountData =
-    rawAccount?.data?.account ||
-    rawAccount?.account ||
-    rawAccount?.data ||
-    rawAccount;
+  const accountData = rawAccount?.data?.account || rawAccount?.account || rawAccount;
+  const accountType = (accountData?.type || rawAccount?.fiType || "unknown").toLowerCase();
 
-  const accountType = accountData?.type || rawAccount?.fiType || "unknown";
-
-  // Extract profile — try both casings
+  // Profile
   const holders =
-    getField(accountData, "profile", "holders", "holder") ||
-    getField(accountData, "Profile", "Holders", "Holder") ||
+    accountData?.profile?.holders?.holder ||
+    accountData?.Profile?.Holders?.Holder ||
     [];
+  const holder = holders?.[0] || {};
 
-  const holderName = holders?.[0]?.name || "Account Holder";
-  const holderEmail = holders?.[0]?.email;
-  const holderMobile = holders?.[0]?.mobile;
-  const holderPan = holders?.[0]?.pan || holders?.[0]?.panNumber;
-  const holderDob = holders?.[0]?.dob;
+  // Summary — varies by FI type
+  const summary = accountData?.summary || accountData?.Summary || {};
 
-  // Extract summary — try both casings
-  const summary =
-    getField(accountData, "summary") ||
-    getField(accountData, "Summary") ||
-    {};
+  // For insurance: extract policy-level data
+  const isInsurance = accountType.includes("insurance");
+  const isMutualFund = accountType === "mutual_funds";
+  const isGST = accountType === "gstr1_3b";
 
-  const currentBalance =
-    summary?.currentBalance ?? summary?.balance ?? summary?.currentValue;
-  const investmentValue = summary?.investmentValue;
-  const currentValue = summary?.currentValue;
-  const branch = summary?.branch;
-  const ifscCode = summary?.ifscCode || summary?.ifsc;
+  // Financial value extraction
+  let primaryValue: string | null = null;
+  let secondaryLabel = "";
+  let secondaryValue: string | null = null;
 
-  // Extract transactions — try both casings
-  const txnContainer =
-    getField(accountData, "transactions") ||
-    getField(accountData, "Transactions") ||
-    {};
-  const transactions =
-    txnContainer?.transaction ||
-    txnContainer?.Transaction ||
-    [];
+  if (isInsurance) {
+    primaryValue = summary?.sumAssured || summary?.coverAmount || null;
+    secondaryLabel = "Premium";
+    secondaryValue = summary?.premiumAmount || null;
+  } else if (isMutualFund) {
+    primaryValue = summary?.currentValue || null;
+    secondaryLabel = "Cost";
+    secondaryValue = summary?.costValue || null;
+  } else {
+    primaryValue =
+      summary?.currentValue || summary?.currentBalance ||
+      summary?.maturityAmount || summary?.principalAmount || null;
+    secondaryLabel = summary?.interestRate ? `@ ${summary.interestRate}%` : "";
+    secondaryValue = null;
+  }
+
+  // Transactions
+  const txnContainer = accountData?.transactions || accountData?.Transactions || {};
+  const transactions = txnContainer?.transaction || txnContainer?.Transaction || [];
 
   return {
     maskedAccNumber: rawAccount?.maskedAccNumber || accountData?.maskedAccNumber || "••••",
     linkRefNumber: rawAccount?.linkRefNumber || "",
     fiType: accountType,
-    fiStatus: rawAccount?.FIstatus || rawAccount?.fistatus || rawAccount?.status || "",
-    holderName,
-    holderEmail,
-    holderMobile,
-    holderPan,
-    holderDob,
-    currentBalance,
-    investmentValue,
-    currentValue,
-    branch,
-    ifscCode,
+    fiStatus: rawAccount?.FIstatus || "",
+
+    // Profile
+    holderName: holder?.name || holder?.lgnm || "Account Holder",
+    holderEmail: holder?.email,
+    holderMobile: holder?.mobile,
+    holderPan: holder?.pan || holder?.panNumber,
+    holderDob: holder?.dob,
+
+    // Summary
+    primaryValue,
+    secondaryLabel,
+    secondaryValue,
+    policyName: summary?.policyName,
+    policyType: summary?.policyType,
+    coverType: summary?.coverType,
+    premiumFrequency: summary?.premiumFrequency,
+    branch: summary?.branch,
+    ifscCode: summary?.ifsc || summary?.ifscCode,
+    maturityDate: summary?.maturityDate,
+
+    // Flags
+    isInsurance,
+    isMutualFund,
+    isGST,
+
+    // Transactions
     transactions: Array.isArray(transactions) ? transactions : [],
     raw: accountData,
   };
 }
 
-function AccountCard({ account }: { account: ReturnType<typeof normalizeAccount> }) {
+type NormalizedAccount = ReturnType<typeof normalizeAccount>;
+
+function getTransactionDirection(txn: any, account: NormalizedAccount): "in" | "out" | "other" {
+  const type = (txn.type || "").toUpperCase();
+
+  if (account.isInsurance) {
+    if (INSURANCE_INFLOW_TYPES.has(type)) return "in";
+    if (INSURANCE_OUTFLOW_TYPES.has(type)) return "out";
+    return "other";
+  }
+
+  if (account.isMutualFund) {
+    if (MF_INFLOW_TYPES.has(type)) return "in";
+    if (MF_OUTFLOW_TYPES.has(type)) return "out";
+    return "other";
+  }
+
+  // Bank accounts
+  if (type === "CREDIT" || type === "INTEREST" || type === "INSTALLMENT") return "in";
+  if (type === "DEBIT" || type === "TDS") return "out";
+  return "other";
+}
+
+function AccountCard({ account }: { account: NormalizedAccount }) {
   const [expanded, setExpanded] = useState(false);
+
+  // Skip GST accounts for the summary view
+  if (account.isGST) return null;
 
   return (
     <div className="bg-card rounded-xl border border-border/50 overflow-hidden">
@@ -209,33 +178,42 @@ function AccountCard({ account }: { account: ReturnType<typeof normalizeAccount>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-medium text-sm truncate">
-              {account.holderName}
+              {account.policyName || account.holderName}
             </span>
             <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
               {account.maskedAccNumber}
             </span>
             {account.fiStatus === "READY" && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-success/10 text-success">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
                 ✓
               </span>
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="capitalize">{account.fiType.replace(/_/g, " ")}</span>
+            {account.policyType && (
+              <span>• {account.policyType.replace(/_/g, " ")}</span>
+            )}
             {account.branch && <span>• {account.branch}</span>}
             {account.ifscCode && <span>• {account.ifscCode}</span>}
+            {account.premiumFrequency && (
+              <span>• {account.premiumFrequency.replace(/_/g, " ")}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 ml-4">
           <div className="text-right">
             <span className="font-display font-semibold text-sm">
-              {formatCurrency(
-                account.currentBalance || account.currentValue
-              )}
+              {formatCurrency(account.primaryValue)}
             </span>
-            {account.investmentValue && (
+            {account.secondaryValue && (
               <div className="text-xs text-muted-foreground">
-                Invested: {formatCurrency(account.investmentValue)}
+                {account.secondaryLabel}: {formatCurrency(account.secondaryValue)}
+              </div>
+            )}
+            {account.secondaryLabel && !account.secondaryValue && (
+              <div className="text-xs text-muted-foreground">
+                {account.secondaryLabel}
               </div>
             )}
           </div>
@@ -269,10 +247,14 @@ function AccountCard({ account }: { account: ReturnType<typeof normalizeAccount>
                 <span>{account.holderMobile}</span>
               </div>
             )}
-            {account.holderDob && (
+            {account.maturityDate && (
               <div>
-                <span className="text-muted-foreground">DOB:</span>{" "}
-                <span>{account.holderDob}</span>
+                <span className="text-muted-foreground">Maturity:</span>{" "}
+                <span>
+                  {new Date(account.maturityDate).toLocaleDateString("en-IN", {
+                    day: "numeric", month: "short", year: "numeric",
+                  })}
+                </span>
               </div>
             )}
           </div>
@@ -284,47 +266,46 @@ function AccountCard({ account }: { account: ReturnType<typeof normalizeAccount>
                 Recent Transactions ({account.transactions.length})
               </h4>
               <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                {account.transactions.slice(0, 10).map((txn: any, i: number) => {
-                  const txnType =
-                    txn.type || txn.txnType || txn.transactionType || "";
-                  const isCredit =
-                    txnType.toUpperCase() === "CREDIT";
+                {account.transactions.slice(0, 15).map((txn: any, i: number) => {
+                  const direction = getTransactionDirection(txn, account);
                   const amount = txn.amount || txn.transactionAmount || "0";
                   const timestamp =
-                    txn.transactionTimestamp ||
-                    txn.valueDate ||
-                    txn.txnDate ||
-                    txn.date ||
-                    "";
+                    txn.transactionTimestamp || txn.txnDate ||
+                    txn.transactionDate || txn.valueDate || "";
                   const narration =
-                    txn.narration ||
-                    txn.description ||
-                    txn.remarks ||
-                    "Transaction";
+                    txn.narration || txn.description || txn.remarks || "Transaction";
+                  const txnType = (txn.type || "").replace(/_/g, " ");
 
                   return (
                     <div
                       key={txn.txnId || txn.transactionId || i}
                       className="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg bg-muted/30"
                     >
-                      <div className="flex-1 min-w-0">
-                        <span className="truncate block">{narration}</span>
+                      <div className="flex-1 min-w-0 mr-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate block max-w-[250px]">{narration}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground shrink-0 capitalize">
+                            {txnType.toLowerCase()}
+                          </span>
+                        </div>
                         {timestamp && (
                           <span className="text-[11px] text-muted-foreground">
                             {new Date(timestamp).toLocaleDateString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
+                              day: "numeric", month: "short", year: "numeric",
                             })}
                           </span>
                         )}
                       </div>
                       <span
-                        className={`font-display font-medium ml-3 ${
-                          isCredit ? "text-success" : "text-destructive"
+                        className={`font-display font-medium shrink-0 ${
+                          direction === "in"
+                            ? "text-emerald-500"
+                            : direction === "out"
+                            ? "text-red-400"
+                            : "text-muted-foreground"
                         }`}
                       >
-                        {isCredit ? "+" : "-"}
+                        {direction === "in" ? "+" : direction === "out" ? "−" : ""}
                         {formatCurrency(amount)}
                       </span>
                     </div>
@@ -345,33 +326,29 @@ function AccountCard({ account }: { account: ReturnType<typeof normalizeAccount>
 
 export default function FinancialSummary({ data }: FinancialSummaryProps) {
   // Normalize all accounts from all FIPs
-  const allNormalized: ReturnType<typeof normalizeAccount>[] = [];
+  const allNormalized: NormalizedAccount[] = [];
 
   for (const fipData of data) {
     const accounts: any[] =
-      fipData.data ||
-      fipData.accounts ||
-      fipData.Accounts ||
-      [];
+      fipData.data || fipData.accounts || fipData.Accounts || [];
 
     if (!Array.isArray(accounts)) continue;
 
     for (const rawAccount of accounts) {
-      // Skip accounts with FAILURE status
       if (rawAccount?.maskedAccNumber?.includes("FAILURE")) continue;
 
       const normalized = normalizeAccount(rawAccount);
+      // Skip GST from aggregation
+      if (normalized.isGST) continue;
       allNormalized.push(normalized);
     }
   }
 
   // Group by FI type
-  const accountsByType: Record<string, ReturnType<typeof normalizeAccount>[]> = {};
+  const accountsByType: Record<string, NormalizedAccount[]> = {};
   for (const acc of allNormalized) {
     const type = acc.fiType;
-    if (!accountsByType[type]) {
-      accountsByType[type] = [];
-    }
+    if (!accountsByType[type]) accountsByType[type] = [];
     accountsByType[type].push(acc);
   }
 
@@ -386,16 +363,12 @@ export default function FinancialSummary({ data }: FinancialSummaryProps) {
     );
   }
 
-  // Calculate totals per FI type
+  // Totals per type
   const typeTotals = fiTypes.map((type) => {
     const accounts = accountsByType[type];
     let total = 0;
     for (const acc of accounts) {
-      const val =
-        parseFloat(acc.currentBalance || "0") ||
-        parseFloat(acc.currentValue || "0") ||
-        0;
-      total += val;
+      total += parseFloat(acc.primaryValue || "0") || 0;
     }
     return { type, total, count: accounts.length };
   });
@@ -423,14 +396,9 @@ export default function FinancialSummary({ data }: FinancialSummaryProps) {
           };
           const Icon = config.icon;
           return (
-            <div
-              key={type}
-              className="bg-card rounded-xl border border-border/50 p-4"
-            >
+            <div key={type} className="bg-card rounded-xl border border-border/50 p-4">
               <div className="flex items-center gap-2 mb-1">
-                <div
-                  className={`w-6 h-6 rounded-md flex items-center justify-center ${config.color}`}
-                >
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center ${config.color}`}>
                   <Icon className="w-3.5 h-3.5" />
                 </div>
                 <span className="text-xs text-muted-foreground capitalize">
@@ -450,9 +418,7 @@ export default function FinancialSummary({ data }: FinancialSummaryProps) {
       {fiTypes.length > 1 && (
         <div className="flex flex-wrap gap-1 p-1 bg-muted/50 rounded-lg w-fit">
           {fiTypes.map((type) => {
-            const config = FI_TYPE_CONFIG[type] || {
-              label: type.replace(/_/g, " "),
-            };
+            const config = FI_TYPE_CONFIG[type] || { label: type.replace(/_/g, " ") };
             return (
               <button
                 key={type}
@@ -470,13 +436,10 @@ export default function FinancialSummary({ data }: FinancialSummaryProps) {
         </div>
       )}
 
-      {/* Account cards for active tab */}
+      {/* Account cards */}
       <div className="space-y-3">
         {(accountsByType[activeTab] || []).map((account, i) => (
-          <AccountCard
-            key={account.linkRefNumber || i}
-            account={account}
-          />
+          <AccountCard key={account.linkRefNumber || i} account={account} />
         ))}
       </div>
     </div>

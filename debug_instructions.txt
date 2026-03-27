@@ -1,2 +1,0 @@
-// Script to debug Upstox response
-console.log("Please use the browser debugger to inspect the raw network response from /api/portfolio or the provider logs.");

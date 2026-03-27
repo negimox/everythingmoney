@@ -1,99 +1,116 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import DashboardPageLayout from "@/components/dashboard/layout";
 import ConsentForm from "@/components/financial/consent-form";
 import ConsentStatusTracker from "@/components/financial/consent-status";
 import FinancialSummary from "@/components/financial/financial-summary";
 import { Landmark, Loader2, RotateCcw } from "lucide-react";
-import type { SetuFIDataPayload, FinancialFlowStep } from "@/lib/setu/types";
+import type { FinancialFlowStep } from "@/lib/setu/types";
 
-// Session storage keys for persistence
-const STORAGE_KEYS = {
+// Cookie helpers — cookies persist across tabs and are not size-limited like sessionStorage
+function setCookie(name: string, value: string, days: number = 1) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+}
+
+const COOKIE_KEYS = {
   CONSENT_ID: "setu_consent_id",
   CONSENT_URL: "setu_consent_url",
   SESSION_ID: "setu_session_id",
   FLOW_STEP: "setu_flow_step",
-  FI_DATA: "setu_fi_data",
 } as const;
 
 function saveState(key: string, value: string | null) {
   if (value) {
-    sessionStorage.setItem(key, value);
+    setCookie(key, value);
   } else {
-    sessionStorage.removeItem(key);
+    deleteCookie(key);
   }
 }
 
 function clearAllState() {
-  Object.values(STORAGE_KEYS).forEach((key) =>
-    sessionStorage.removeItem(key)
-  );
+  Object.values(COOKIE_KEYS).forEach((key) => deleteCookie(key));
 }
 
 export default function FinancialDataPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [step, setStep] = useState<FinancialFlowStep>("form");
   const [consentId, setConsentId] = useState<string | null>(null);
   const [consentUrl, setConsentUrl] = useState<string | null>(null);
-  const [fiData, setFiData] = useState<SetuFIDataPayload[] | null>(null);
+  const [fiData, setFiData] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fetchingRef = useRef(false);
   const initializedRef = useRef(false);
 
-  // Restore state from sessionStorage on mount
+  // Restore state from cookies on mount
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
+    // SETU redirects with either:
+    //   ?consent_status=success  (our configured redirect URL)
+    //   ?success=true&id=<consentId>  (SETU's actual redirect format)
     const consentStatus = searchParams.get("consent_status");
-    const storedConsentId = sessionStorage.getItem(STORAGE_KEYS.CONSENT_ID);
-    const storedConsentUrl = sessionStorage.getItem(STORAGE_KEYS.CONSENT_URL);
-    const storedStep = sessionStorage.getItem(STORAGE_KEYS.FLOW_STEP) as FinancialFlowStep | null;
-    const storedFiData = sessionStorage.getItem(STORAGE_KEYS.FI_DATA);
-    const storedSessionId = sessionStorage.getItem(STORAGE_KEYS.SESSION_ID);
+    const setuSuccess = searchParams.get("success");
+    const setuConsentIdParam = searchParams.get("id");
+    const isConsentRedirect = consentStatus === "success" || setuSuccess === "true";
 
-    // Handle redirect back from SETU consent screens
-    if (consentStatus === "success" && storedConsentId) {
-      setConsentId(storedConsentId);
-      setConsentUrl(storedConsentUrl);
-      setStep("consent_pending");
-      return;
+    const storedConsentId = getCookie(COOKIE_KEYS.CONSENT_ID);
+    const storedConsentUrl = getCookie(COOKIE_KEYS.CONSENT_URL);
+    const storedStep = getCookie(COOKIE_KEYS.FLOW_STEP) as FinancialFlowStep | null;
+    const storedSessionId = getCookie(COOKIE_KEYS.SESSION_ID);
+
+    // The consent ID to use: from URL param (SETU redirect) or from cookies
+    const effectiveConsentId = setuConsentIdParam || storedConsentId;
+
+    // Strip redirect params from URL to prevent re-triggering on refresh
+    if (isConsentRedirect || setuConsentIdParam) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("consent_status");
+      url.searchParams.delete("success");
+      url.searchParams.delete("id");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
     }
 
-    // Restore: data already loaded and cached
-    if (storedStep === "data_loaded" && storedFiData) {
-      try {
-        const parsed = JSON.parse(storedFiData);
-        if (parsed && (Array.isArray(parsed) ? parsed.length > 0 : true)) {
-          setFiData(parsed);
-          setConsentId(storedConsentId);
-          setStep("data_loaded");
-          return;
-        }
-      } catch { /* fall through */ }
-    }
-
-    // Restore: data was loaded but FI data not cached (e.g. was empty) — re-fetch from session
+    // PRIORITY 1: Restore completed/in-progress session (re-fetch data by session ID)
+    // This MUST come before the consent redirect check, otherwise a refresh
+    // or redirect tab would re-create a session and hit "Consent use exceeded".
     if ((storedStep === "data_loaded" || storedStep === "fetching_data") && storedSessionId) {
       setConsentId(storedConsentId);
       setStep("fetching_data");
 
-      // Re-fetch data from stored session
       (async () => {
         try {
           const dataRes = await fetch(`/api/setu/data?sessionId=${storedSessionId}`);
           const data = await dataRes.json();
 
-          if ((data.status === "COMPLETED" || data.status === "PARTIAL") && data.payload) {
+          if (
+            (data.status === "COMPLETED" || data.status === "PARTIAL" || data.status === "PENDING") &&
+            data.payload &&
+            Array.isArray(data.payload) &&
+            data.payload.length > 0
+          ) {
             setFiData(data.payload);
             setStep("data_loaded");
-            saveState(STORAGE_KEYS.FLOW_STEP, "data_loaded");
-            saveState(STORAGE_KEYS.FI_DATA, JSON.stringify(data.payload));
+            // Re-confirm all cookies on successful restore
+            saveState(COOKIE_KEYS.FLOW_STEP, "data_loaded");
+            saveState(COOKIE_KEYS.SESSION_ID, storedSessionId);
+            if (storedConsentId) saveState(COOKIE_KEYS.CONSENT_ID, storedConsentId);
           } else {
-            // Data not available anymore — show form
+            // Session data expired or unavailable — back to form
             setStep("form");
             clearAllState();
           }
@@ -105,12 +122,34 @@ export default function FinancialDataPage() {
       return;
     }
 
-    // Restore: consent pending
+    // PRIORITY 2: Handle redirect back from SETU consent approval screen
+    // Handles both ?consent_status=success and ?success=true&id=<consentId>
+    if (isConsentRedirect && effectiveConsentId) {
+      setConsentId(effectiveConsentId);
+      setConsentUrl(storedConsentUrl);
+
+      // Save the consent ID from the URL param if we didn't have it in cookies
+      if (!storedConsentId && setuConsentIdParam) {
+        saveState(COOKIE_KEYS.CONSENT_ID, setuConsentIdParam);
+      }
+      saveState(COOKIE_KEYS.FLOW_STEP, "consent_pending");
+
+      setStep("consent_pending");
+      return;
+    }
+
+    // PRIORITY 3: Restore consent-pending state (consent created but not yet approved)
     if (storedStep === "consent_pending" && storedConsentId && storedConsentUrl) {
       setConsentId(storedConsentId);
       setConsentUrl(storedConsentUrl);
       setStep("consent_pending");
       return;
+    }
+
+    // PRIORITY 4: If flow_step says data_loaded but we lost session_id, reset
+    // (handles orphaned state where only FLOW_STEP cookie survived)
+    if (storedStep && storedStep !== "form") {
+      clearAllState();
     }
 
     // Default: show form
@@ -124,90 +163,125 @@ export default function FinancialDataPage() {
       setConsentUrl(url);
       setStep("consent_pending");
 
-      saveState(STORAGE_KEYS.CONSENT_ID, id);
-      saveState(STORAGE_KEYS.CONSENT_URL, url);
-      saveState(STORAGE_KEYS.FLOW_STEP, "consent_pending");
+      saveState(COOKIE_KEYS.CONSENT_ID, id);
+      saveState(COOKIE_KEYS.CONSENT_URL, url);
+      saveState(COOKIE_KEYS.FLOW_STEP, "consent_pending");
     },
     []
   );
+
+  /** Check if payload has at least one account with actual data */
+  function hasReadyAccounts(payload: any[] | null | undefined): boolean {
+    if (!Array.isArray(payload)) return false;
+    return payload.some((fip: any) => {
+      const accounts = fip?.accounts || fip?.data || [];
+      if (!Array.isArray(accounts)) return false;
+      return accounts.some((acc: any) => acc?.FIstatus === "READY" && acc?.data);
+    });
+  }
+
+  /** Poll a session until data is ready, returns true if data was loaded */
+  async function pollSessionForData(
+    sessionId: string,
+    consentId: string,
+    maxPolls: number = 12,
+    interval: number = 5000
+  ): Promise<boolean> {
+    for (let poll = 0; poll < maxPolls; poll++) {
+      if (poll > 0) {
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
+
+      const dataRes = await fetch(`/api/setu/data?sessionId=${sessionId}`);
+      const data = await dataRes.json();
+
+      console.log("[Financial Data] Session poll response:", data);
+
+      // Accept COMPLETED, PARTIAL, or PENDING-with-data
+      // SETU returns PENDING when some FIPs responded but others haven't yet.
+      // The payload may already contain usable READY accounts.
+      const isComplete = data.status === "COMPLETED" || data.status === "PARTIAL";
+      const isPendingWithData = data.status === "PENDING" && hasReadyAccounts(data.payload);
+
+      if (isComplete || isPendingWithData) {
+        const payload = data.payload;
+        setFiData(payload || []);
+        setStep("data_loaded");
+
+        // Persist ALL IDs together
+        saveState(COOKIE_KEYS.CONSENT_ID, consentId);
+        saveState(COOKIE_KEYS.SESSION_ID, sessionId);
+        saveState(COOKIE_KEYS.FLOW_STEP, "data_loaded");
+
+        return true;
+      }
+
+      if (data.status === "FAILED" || data.status === "EXPIRED") {
+        console.warn(`Data session ${sessionId} ${data.status}`);
+        return false;
+      }
+    }
+    return false; // timed out
+  }
 
   const handleConsentApproved = useCallback(async (approvedConsentId: string) => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
     setStep("fetching_data");
-    saveState(STORAGE_KEYS.FLOW_STEP, "fetching_data");
-
-    // Keep retries within consent frequency limit (configured as 2/day on Bridge)
-    const MAX_SESSION_RETRIES = 2;
-    const POLL_INTERVAL = 5000;
-    const MAX_POLLS_PER_SESSION = 12;
+    saveState(COOKIE_KEYS.CONSENT_ID, approvedConsentId);
+    saveState(COOKIE_KEYS.FLOW_STEP, "fetching_data");
 
     try {
-      for (let sessionAttempt = 0; sessionAttempt < MAX_SESSION_RETRIES; sessionAttempt++) {
-        if (sessionAttempt > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Check if another tab already created a session (via shared cookies)
+      const existingSessionId = getCookie(COOKIE_KEYS.SESSION_ID);
+      if (existingSessionId) {
+        console.log("[Financial Data] Found existing session in cookies:", existingSessionId);
+        const loaded = await pollSessionForData(existingSessionId, approvedConsentId);
+        if (loaded) {
+          fetchingRef.current = false;
+          return;
         }
+        // Existing session failed/timed out — fall through to create new
+      }
 
-        const sessionRes = await fetch("/api/setu/data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consentId: approvedConsentId }),
-        });
+      // Create new session (only if no existing session was found or it failed)
+      const sessionRes = await fetch("/api/setu/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consentId: approvedConsentId }),
+      });
 
-        const sessionData = await sessionRes.json();
-        if (!sessionRes.ok) {
-          const errMsg = sessionData.error || "";
-          if (errMsg.includes("Consent use exceeded")) {
-            throw new Error(
-              "Daily data fetch limit reached for this consent. " +
-              "Please try again tomorrow, or create a new consent request."
-            );
-          }
-          throw new Error(errMsg || "Failed to create data session");
-        }
-
-        const sessionId = sessionData.sessionId;
-        saveState(STORAGE_KEYS.SESSION_ID, sessionId);
-
-        let sessionFailed = false;
-
-        for (let poll = 0; poll < MAX_POLLS_PER_SESSION; poll++) {
-          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
-
-          const dataRes = await fetch(`/api/setu/data?sessionId=${sessionId}`);
-          const data = await dataRes.json();
-
-          // Log raw response for debugging
-          console.log("[Financial Data] Session poll response:", data);
-
-          if (data.status === "COMPLETED" || data.status === "PARTIAL") {
-            const payload = data.payload;
-            setFiData(payload || []);
-            setStep("data_loaded");
-
-            // Persist loaded data
-            saveState(STORAGE_KEYS.FLOW_STEP, "data_loaded");
-            if (payload) {
-              saveState(STORAGE_KEYS.FI_DATA, JSON.stringify(payload));
+      const sessionData = await sessionRes.json();
+      if (!sessionRes.ok) {
+        const errMsg = sessionData.error || "";
+        if (errMsg.includes("Consent use exceeded")) {
+          // Another tab may have completed — re-check cookies one more time
+          const laterSessionId = getCookie(COOKIE_KEYS.SESSION_ID);
+          if (laterSessionId) {
+            const loaded = await pollSessionForData(laterSessionId, approvedConsentId);
+            if (loaded) {
+              fetchingRef.current = false;
+              return;
             }
-
-            fetchingRef.current = false;
-            return;
           }
-
-          if (data.status === "FAILED" || data.status === "EXPIRED") {
-            console.warn(
-              `Data session ${sessionId} ${data.status}, attempt ${sessionAttempt + 1}/${MAX_SESSION_RETRIES}`
-            );
-            sessionFailed = true;
-            break;
-          }
+          throw new Error(
+            "Daily data fetch limit reached for this consent. " +
+            "Please try again tomorrow, or create a new consent request."
+          );
         }
+        throw new Error(errMsg || "Failed to create data session");
+      }
 
-        if (!sessionFailed) {
-          console.warn(`Data session ${sessionId} timed out, retrying...`);
-        }
+      const sessionId = sessionData.sessionId;
+      saveState(COOKIE_KEYS.CONSENT_ID, approvedConsentId);
+      saveState(COOKIE_KEYS.SESSION_ID, sessionId);
+      saveState(COOKIE_KEYS.FLOW_STEP, "fetching_data");
+
+      const loaded = await pollSessionForData(sessionId, approvedConsentId);
+      if (loaded) {
+        fetchingRef.current = false;
+        return;
       }
 
       throw new Error(
@@ -219,7 +293,7 @@ export default function FinancialDataPage() {
     } catch (err: any) {
       setError(err.message || "Failed to fetch financial data");
       setStep("error");
-      saveState(STORAGE_KEYS.FLOW_STEP, "error");
+      saveState(COOKIE_KEYS.FLOW_STEP, "error");
       fetchingRef.current = false;
     }
   }, []);
@@ -251,11 +325,11 @@ export default function FinancialDataPage() {
         )}
 
         {/* Step: Consent Pending */}
-        {step === "consent_pending" && consentId && consentUrl && (
+        {step === "consent_pending" && consentId && (
           <div className="bg-card/50 rounded-2xl border border-border/40 p-8">
             <ConsentStatusTracker
               consentId={consentId}
-              consentUrl={consentUrl}
+              consentUrl={consentUrl || ""}
               onConsentApproved={handleConsentApproved}
               onError={(err) => {
                 setError(err);
