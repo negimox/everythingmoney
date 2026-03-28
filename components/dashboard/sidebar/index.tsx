@@ -17,22 +17,15 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import AtomIcon from "@/components/icons/atom";
 import BracketsIcon from "@/components/icons/brackets";
 import ProcessorIcon from "@/components/icons/proccesor";
-import GearIcon from "@/components/icons/gear";
 import MonkeyIcon from "@/components/icons/monkey";
-import DotsVerticalIcon from "@/components/icons/dots-vertical";
 import { Bullet } from "@/components/ui/bullet";
 import { SlidersHorizontal, PieChart, Activity, Newspaper, Eye } from "lucide-react";
 import LockIcon from "@/components/icons/lock";
-import Image from "next/image";
+import { UserButton } from "@clerk/nextjs";
 
 // This is sample data for the sidebar
 const data = {
@@ -42,7 +35,7 @@ const data = {
       items: [
         {
           title: "Dashboard",
-          url: "/",
+          url: "/dashboard",
           icon: BracketsIcon,
         },
         {
@@ -88,15 +81,6 @@ const data = {
       ],
     },
   ],
-  market: {
-    title: "Market Status",
-    status: "open",
-  },
-  user: {
-    name: "Investor",
-    email: "investor@tickertape.in",
-    avatar: "/avatars/user_krimson.png",
-  },
 };
 
 export function DashboardSidebar({
@@ -131,7 +115,7 @@ export function DashboardSidebar({
               <SidebarMenu>
                 {group.items.map((item) => {
                    // Simple active check: exact match for root, startsWith for others if needed
-                   const isActive = item.url === "/" ? pathname === "/" : pathname?.startsWith(item.url);
+                   const isActive = item.url === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(item.url);
                    
                    return (
                     <SidebarMenuItem
@@ -179,51 +163,18 @@ export function DashboardSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>
             <Bullet className="mr-2" />
-            User
+            Account
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <Popover>
-                  <PopoverTrigger className="flex gap-0.5 w-full group cursor-pointer">
-                    <div className="shrink-0 flex size-14 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground overflow-clip">
-                      <Image
-                        src={data.user.avatar || "/placeholder.svg"}
-                        alt={data.user.name}
-                        width={120}
-                        height={120}
-                      />
-                    </div>
-                    <div className="group/item pl-3 pr-1.5 pt-2 pb-1.5 flex-1 flex bg-sidebar-accent hover:bg-sidebar-accent-active/75 items-center rounded group-data-[state=open]:bg-sidebar-accent-active group-data-[state=open]:hover:bg-sidebar-accent-active group-data-[state=open]:text-sidebar-accent-foreground">
-                      <div className="grid flex-1 text-left text-sm leading-tight">
-                        <span className="truncate text-xl font-display">
-                          {data.user.name}
-                        </span>
-                        <span className="truncate text-xs uppercase opacity-50 group-hover/item:opacity-100">
-                          {data.user.email}
-                        </span>
-                      </div>
-                      <DotsVerticalIcon className="ml-auto size-4" />
-                    </div>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-56 p-0"
-                    side="bottom"
-                    align="end"
-                    sideOffset={4}
-                  >
-                    <div className="flex flex-col">
-                      <button className="flex items-center px-4 py-2 text-sm hover:bg-accent">
-                        <MonkeyIcon className="mr-2 h-4 w-4" />
-                        Account
-                      </button>
-                      <button className="flex items-center px-4 py-2 text-sm hover:bg-accent">
-                        <GearIcon className="mr-2 h-4 w-4" />
-                        Settings
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+              <SidebarMenuItem className="flex items-center justify-center p-2">
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: "size-10",
+                    },
+                  }}
+                />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

@@ -9,6 +9,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.0.7",
+    "@clerk/ui": "^1.2.4",
     "@emotion/is-prop-valid": "latest",
     "@eslint/eslintrc": "3.3.3",
     "@hookform/resolvers": "^3.10.0",
