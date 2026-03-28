@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import DashboardPageLayout from "@/components/dashboard/layout";
 import ConsentForm from "@/components/financial/consent-form";
@@ -41,9 +41,7 @@ function saveState(key: string, value: string | null) {
 
 function clearAllState() {
   Object.values(COOKIE_KEYS).forEach((key) => deleteCookie(key));
-}
-
-export default function FinancialDataPage() {
+}function FinancialDataContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -396,5 +394,30 @@ export default function FinancialDataPage() {
         )}
       </div>
     </DashboardPageLayout>
+  );
+}
+
+export default function FinancialDataPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardPageLayout
+          header={{
+            title: "Financial Data",
+            description: "Fetch your financial data via Account Aggregator",
+            icon: Landmark,
+          }}
+        >
+          <div className="max-w-4xl mx-auto py-12 text-center">
+            <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground tracking-wide">
+              Initializing Financial Dashboard...
+            </p>
+          </div>
+        </DashboardPageLayout>
+      }
+    >
+      <FinancialDataContent />
+    </Suspense>
   );
 }

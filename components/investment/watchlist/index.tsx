@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { ChevronDown, ChevronRight, Plus, Search, RefreshCw, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GoTag } from "react-icons/go";
@@ -238,7 +238,7 @@ function AddSymbolModal({ allItems, onClose }: AddSymbolModalProps) {
 
 // ─── Main Watchlist Component ─────────────────────────────────────────────────
 
-export default function Watchlist() {
+function WatchlistContent() {
     const [categories, setCategories] = useState<WatchlistCategory[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(true);
@@ -716,5 +716,13 @@ export default function Watchlist() {
                 <AddSymbolModal allItems={allItems} onClose={() => setShowAddModal(false)} />
             )}
         </>
+    );
+}
+
+export default function Watchlist() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-muted-foreground">Loading watchlist...</div>}>
+            <WatchlistContent />
+        </Suspense>
     );
 }

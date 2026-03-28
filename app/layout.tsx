@@ -18,6 +18,7 @@ const merriweather = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: {
     template: "Everything Money",
     default: "Everything Money - Indian Stock Market Analysis",

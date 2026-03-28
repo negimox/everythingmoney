@@ -27,6 +27,8 @@ import { SlidersHorizontal, PieChart, Activity, Newspaper, Eye, Landmark } from 
 import LockIcon from "@/components/icons/lock";
 import { UserButton } from "@clerk/nextjs";
 import Image from "next/image";
+import { EditProfileDialog } from "@/components/advisor/edit-profile-dialog";
+import { OnboardingGuard } from "@/components/advisor/onboarding-guard";
 
 // This is sample data for the sidebar
 const data = {
@@ -106,7 +108,8 @@ export function LeftSidebar({
   const { state } = useSidebar();
 
   return (
-    <Sidebar collapsible="icon" {...props} className={cn("py-4", className)}>
+    <OnboardingGuard>
+      <Sidebar collapsible="icon" {...props} className={cn("py-4", className)}>
       <SidebarHeader className="rounded-t-lg flex flex-row rounded-b-none p-2 items-center justify-center">
         <div className="flex items-center justify-center w-full px-2">
           <Image 
@@ -184,6 +187,7 @@ export function LeftSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <EditProfileDialog />
               <SidebarMenuItem className="flex items-center justify-center p-1">
                 <UserButton
                   appearance={{
@@ -199,5 +203,6 @@ export function LeftSidebar({
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
+    </OnboardingGuard>
   );
 }

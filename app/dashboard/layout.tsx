@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { MobileHeader } from "@/components/dashboard/mobile-header";
 import { LeftSidebar } from "@/components/dashboard/sidebar/left-sidebar";
 import { RightSidebar } from "@/components/dashboard/sidebar/right-sidebar";
+import { OnboardingGuard } from "@/components/advisor/onboarding-guard";
 import mockDataJson from "@/mock.json";
 import type { MockData } from "@/types/dashboard";
 
@@ -26,7 +27,7 @@ export default async function DashboardLayout({
   const defaultWidthRight = rightSidebarWidth ? rightSidebarWidth.value : "22rem";
 
   return (
-    <>
+    <OnboardingGuard>
       {/* Outer Provider for Left Sidebar */}
       <SidebarProvider defaultOpen={defaultOpenLeft} defaultWidth={defaultWidthLeft} cookieName="sidebar:state">
         <LeftSidebar />
@@ -54,6 +55,6 @@ export default async function DashboardLayout({
           </div>
         </SidebarInset>
       </SidebarProvider>
-    </>
+    </OnboardingGuard>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import {
     RefreshCw, ChevronDown, Plus, LayoutGrid, Search, MoreHorizontal,
     X, ListPlus, Upload, Check, List, ListChecks, Pin, Trash2, Edit2
@@ -607,7 +607,7 @@ function TabContextMenu({ x, y, onClose, onEdit, onDelete }: TabContextMenuProps
 
 type ActiveTab = "all" | FlagColor | string; // string = created list id
 
-export default function MiniWatchlist() {
+function MiniWatchlistContent() {
     const [rawCategories, setRawCategories] = useState<WatchlistCategory[]>([]);
     const [searchPool, setSearchPool] = useState<WatchlistItem[]>([]);
     const [createdLists, setCreatedLists] = useState<CreatedList[]>([]);
@@ -1369,5 +1369,13 @@ export default function MiniWatchlist() {
                 />
             )}
         </>
+    );
+}
+
+export default function MiniWatchlist() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-muted-foreground animate-pulse">Loading watchlist...</div>}>
+            <MiniWatchlistContent />
+        </Suspense>
     );
 }

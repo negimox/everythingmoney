@@ -30,5 +30,6 @@ next-env.d.ts
 openalgo/
 trade-calls-new/
 .DS_Store
+ET_Hackathon/
 # clerk configuration (can include secrets)
 /.clerk/
