@@ -21,11 +21,11 @@ import { cn } from "@/lib/utils";
 import AtomIcon from "@/components/icons/atom";
 import BracketsIcon from "@/components/icons/brackets";
 import ProcessorIcon from "@/components/icons/proccesor";
-import MonkeyIcon from "@/components/icons/monkey";
 import { Bullet } from "@/components/ui/bullet";
 import { SlidersHorizontal, PieChart, Activity, Newspaper, Eye } from "lucide-react";
 import LockIcon from "@/components/icons/lock";
 import { UserButton } from "@clerk/nextjs";
+import Image from "next/image";
 
 // This is sample data for the sidebar
 const data = {
@@ -37,21 +37,25 @@ const data = {
           title: "Dashboard",
           url: "/dashboard",
           icon: BracketsIcon,
+          locked: false,
         },
         {
           title: "Research",
           url: "/research",
           icon: AtomIcon,
+          locked: false,
         },
         {
           title: "Portfolio",
           url: "/portfolio",
           icon: ProcessorIcon,
+          locked: false,
         },
         {
           title: "Watchlist",
           url: "/watchlist",
           icon: Eye,
+          locked: false,
         },
       ],
     },
@@ -62,21 +66,25 @@ const data = {
           title: "Stock Screener",
           url: "/screener",
           icon: SlidersHorizontal,
+          locked: false,
         },
         {
           title: "Mutual Funds",
           url: "/funds",
           icon: PieChart,
+          locked: false,
         },
         {
           title: "Market Sentiment",
           url: "/sentiment",
           icon: Activity,
+          locked: false,
         },
         {
           title: "News & Analysis",
           url: "/news",
           icon: Newspaper,
+          locked: false,
         },
       ],
     },
@@ -91,14 +99,15 @@ export function DashboardSidebar({
 
   return (
     <Sidebar {...props} className={cn("py-sides", className)}>
-      <SidebarHeader className="rounded-t-lg flex gap-3 flex-row rounded-b-none">
-        <div className="flex overflow-clip size-12 shrink-0 items-center justify-center rounded bg-sidebar-primary-foreground/10 transition-colors group-hover:bg-sidebar-primary text-sidebar-primary-foreground">
-          <MonkeyIcon className="size-10 group-hover:scale-[1.7] origin-top-left transition-transform" />
-        </div>
-        <div className="grid flex-1 text-left text-sm leading-tight">
-          <span className="text-2xl font-black">GTNinja</span>
-          <span className="text-xs uppercase font-medium">Indian Stock Analytics</span>
-        </div>
+      <SidebarHeader className="rounded-t-lg flex flex-row rounded-b-none p-4 items-center justify-center">
+        <Image 
+          src="/logo.png" 
+          alt="Everything Money" 
+          width={180} 
+          height={48} 
+          className="h-10 w-auto object-contain"
+          priority
+        />
       </SidebarHeader>
 
       <SidebarContent>

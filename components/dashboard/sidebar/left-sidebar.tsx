@@ -22,11 +22,11 @@ import { cn } from "@/lib/utils";
 import AtomIcon from "@/components/icons/atom";
 import BracketsIcon from "@/components/icons/brackets";
 import ProcessorIcon from "@/components/icons/proccesor";
-import MonkeyIcon from "@/components/icons/monkey";
 import { Bullet } from "@/components/ui/bullet";
 import { SlidersHorizontal, PieChart, Activity, Newspaper, Eye, Landmark } from "lucide-react";
 import LockIcon from "@/components/icons/lock";
 import { UserButton } from "@clerk/nextjs";
+import Image from "next/image";
 
 // This is sample data for the sidebar
 const data = {
@@ -38,26 +38,31 @@ const data = {
           title: "Dashboard",
           url: "/dashboard",
           icon: BracketsIcon,
+          locked: false,
         },
         {
           title: "Research",
           url: "/research",
           icon: AtomIcon,
+          locked: false,
         },
         {
           title: "Portfolio",
           url: "/portfolio",
           icon: ProcessorIcon,
+          locked: false,
         },
         {
           title: "Watchlist",
           url: "/watchlist",
           icon: Eye,
+          locked: false,
         },
         {
           title: "Financial Data",
           url: "/financial-data",
           icon: Landmark,
+          locked: false,
         },
       ],
     },
@@ -68,21 +73,25 @@ const data = {
           title: "Stock Screener",
           url: "/screener",
           icon: SlidersHorizontal,
+          locked: false,
         },
         {
           title: "Mutual Funds",
           url: "/funds",
           icon: PieChart,
+          locked: false,
         },
         {
           title: "Market Sentiment",
           url: "/sentiment",
           icon: Activity,
+          locked: false,
         },
         {
           title: "News & Analysis",
           url: "/news",
           icon: Newspaper,
+          locked: false,
         },
       ],
     },
@@ -98,12 +107,19 @@ export function LeftSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props} className={cn("py-4", className)}>
-      <SidebarHeader className="rounded-t-lg flex gap-3 flex-row rounded-b-none p-2">
-        <div className="flex overflow-clip size-8 shrink-0 items-center justify-center rounded bg-sidebar-primary-foreground/10 transition-colors group-hover:bg-sidebar-primary text-sidebar-primary-foreground">
-          <MonkeyIcon className="size-6 group-hover:scale-[1.7] origin-top-left transition-transform" />
-        </div>
-        <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-          <span className="text-xl font-black">GTNinja</span>
+      <SidebarHeader className="rounded-t-lg flex flex-row rounded-b-none p-2 items-center justify-center">
+        <div className="flex items-center justify-center w-full px-2">
+          <Image 
+            src="/logo.png" 
+            alt="Everything Money" 
+            width={160} 
+            height={40} 
+            className="h-8 w-auto object-contain group-data-[collapsible=icon]:hidden"
+          />
+          {/* Small logo for collapsed state */}
+          <div className="hidden group-data-[collapsible=icon]:flex size-8 items-center justify-center translate-x-[4px]">
+             <Image src="/logo-small.png" alt="E" width={32} height={32} className="size-8 object-contain" />
+          </div>
         </div>
       </SidebarHeader>
 

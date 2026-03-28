@@ -19,8 +19,8 @@ const merriweather = Source_Serif_4({
 
 export const metadata: Metadata = {
   title: {
-    template: "GTNinja",
-    default: "GTNinja - Indian Stock Market Analysis",
+    template: "Everything Money",
+    default: "Everything Money - Indian Stock Market Analysis",
   },
   description:
     "Investment analysis platform for Indian stocks, mutual funds, and ETFs. Research, analyze portfolios, and track market sentiment in real-time.",

@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import MonkeyIcon from "@/components/icons/monkey";
 import type { MockData } from "@/types/dashboard";
 import BellIcon from "@/components/icons/bell";
+import Image from "next/image";
 
 interface MobileHeaderProps {
   mockData: MockData;
@@ -23,10 +23,13 @@ export function MobileHeader({ mockData }: MobileHeaderProps) {
         {/* Center: Logo + Title */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-16 bg-primary rounded flex items-center justify-center">
-              <MonkeyIcon className="size-6 text-primary-foreground" />
-            </div>
-            <span className="text-sm font-semibold">GTNinja</span>
+            <Image 
+              src="/logo.png" 
+              alt="Everything Money" 
+              width={120} 
+              height={32} 
+              className="h-8 w-auto object-contain"
+            />
           </div>
         </div>
 
