@@ -81,6 +81,7 @@ async function setuFetch<T>(
  */
 export async function createConsent(
   mobileNumber: string,
+  customRedirectUrl?: string,
   fiTypes: string[] = DEFAULT_FI_TYPES
 ): Promise<SetuConsentResponse> {
   // Build data range: 1 year back to today
@@ -99,7 +100,7 @@ export async function createConsent(
       to: now.toISOString(),
     },
     context: [],
-    redirectUrl: SETU_REDIRECT_URL,
+    redirectUrl: customRedirectUrl || SETU_REDIRECT_URL,
     fiTypes,
     consentTypes: DEFAULT_CONSENT_TYPES,
     fetchType: "PERIODIC",

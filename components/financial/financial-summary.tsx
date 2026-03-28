@@ -172,6 +172,7 @@ function AccountCard({ account }: { account: NormalizedAccount }) {
   return (
     <div className="bg-card rounded-xl border border-border/50 overflow-hidden">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
       >
@@ -328,6 +329,16 @@ export default function FinancialSummary({ data }: FinancialSummaryProps) {
   // Normalize all accounts from all FIPs
   const allNormalized: NormalizedAccount[] = [];
 
+  if (!data || !Array.isArray(data)) {
+    return (
+      <div className="text-center py-12 bg-muted/20 rounded-2xl border border-dashed">
+        <p className="text-muted-foreground text-sm">
+          No valid account aggregator data available.
+        </p>
+      </div>
+    );
+  }
+
   for (const fipData of data) {
     const accounts: any[] =
       fipData.data || fipData.accounts || fipData.Accounts || [];
@@ -422,6 +433,7 @@ export default function FinancialSummary({ data }: FinancialSummaryProps) {
             return (
               <button
                 key={type}
+                type="button"
                 onClick={() => setActiveTab(type)}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize ${
                   activeTab === type

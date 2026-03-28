@@ -8,7 +8,7 @@ import { createConsent, getConsentStatus } from "@/lib/setu/client";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { mobileNumber } = body;
+    const { mobileNumber, redirectUrl } = body;
 
     if (!mobileNumber || !/^\d{10}$/.test(mobileNumber)) {
       return NextResponse.json(
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const consent = await createConsent(mobileNumber);
+    const consent = await createConsent(mobileNumber, redirectUrl);
 
     return NextResponse.json({
       id: consent.id,

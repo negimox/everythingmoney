@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
-import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import {
   User,
@@ -17,8 +17,11 @@ import {
   FileUp,
   Sparkles,
   ChevronRight,
+  RotateCcw,
 } from "lucide-react";
 import ConsentForm from "@/components/financial/consent-form";
+import ConsentStatusTracker from "@/components/financial/consent-status";
+import FinancialSummary from "@/components/financial/financial-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,47 +36,70 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
-// ── Types ────────────────────────────────────────────────────
+const formSchema = z
+  .object({
+    // Step 1: Personal & Goals
+    name: z.string().min(2, "Name must be at least 2 characters."),
+    age: z.coerce.number().min(18, "Must be at least 18.").max(100),
+    city: z.string().min(1, "City is required."),
+    dependents: z.coerce.number().min(0, "Cannot be negative."),
+    primary_goal: z.string().min(1, "Please select a goal."),
+    target_retirement_age: z.coerce
+      .number()
+      .min(18, "Minimum 18.")
+      .max(100, "Maximum 100."),
+    target_monthly_draw: z.coerce.number().min(1, "Must be greater than 0."),
+    risk_appetite: z.string().min(1, "Please select risk appetite."),
+    investment_horizon_years: z.coerce
+      .number()
+      .min(1, "Min 1 year.")
+      .max(50, "Max 50 years."),
 
-interface FormData {
-  // Step 1: Personal & Goals
-  name: string;
-  age: number;
-  city: string;
-  dependents: number;
-  primary_goal: string;
-  target_retirement_age: number;
-  target_monthly_draw: number;
-  risk_appetite: string;
-  investment_horizon_years: number;
+    // Step 2: Income & Tax
+    annual_income: z.coerce.number().min(0),
+    annual_hra_received: z.coerce.number().min(0),
+    annual_rent_paid: z.coerce.number().min(0),
+    is_metro_city: z.boolean().default(true),
+    existing_ppf: z.coerce.number().min(0),
+    existing_epf: z.coerce.number().min(0),
+    existing_nps: z.coerce.number().min(0),
+    home_loan_interest_annually: z.coerce.number().min(0),
 
-  // Step 2: Income & Tax
-  annual_income: number;
-  annual_hra_received: number;
-  annual_rent_paid: number;
-  is_metro_city: boolean;
-  existing_ppf: number;
-  existing_epf: number;
-  existing_nps: number;
-  home_loan_interest_annually: number;
+    // Step 3: Assets (Manual Fallback)
+    existing_mf: z.coerce.number().min(0),
+    existing_fd: z.coerce.number().min(0),
+    existing_savings: z.coerce.number().min(0),
+    current_sip: z.coerce.number().min(0),
 
-  // Step 3: Assets (Manual Fallback)
-  existing_mf: number;
-  existing_fd: number;
-  existing_savings: number;
-  current_sip: number;
+    // Step 4: Liabilities & Expenses
+    monthly_expenses: z.coerce.number().min(0),
+    home_loan_emi: z.coerce.number().min(0),
+    car_loan_emi: z.coerce.number().min(0),
+    other_emi: z.coerce.number().min(0),
+    has_term_insurance: z.boolean().default(false),
+    term_cover_amount: z.coerce.number().min(0),
+    has_health_insurance: z.boolean().default(false),
+    health_cover_amount: z.coerce.number().min(0),
+  })
+  .refine((data) => data.target_retirement_age > data.age, {
+    message: "Retirement age must be greater than current age",
+    path: ["target_retirement_age"],
+  });
 
-  // Step 4: Liabilities & Expenses
-  monthly_expenses: number;
-  home_loan_emi: number;
-  car_loan_emi: number;
-  other_emi: number;
-  has_term_insurance: boolean;
-  term_cover_amount: number;
-  has_health_insurance: boolean;
-  health_cover_amount: number;
-}
+type FormData = z.infer<typeof formSchema>;
 
 const INITIAL_DATA: FormData = {
   name: "",
@@ -109,6 +135,41 @@ const INITIAL_DATA: FormData = {
   has_health_insurance: false,
   health_cover_amount: 0,
 };
+
+const STEP_FIELDS: (keyof FormData)[][] = [
+  [
+    "name",
+    "age",
+    "city",
+    "dependents",
+    "primary_goal",
+    "target_retirement_age",
+    "target_monthly_draw",
+    "risk_appetite",
+    "investment_horizon_years",
+  ],
+  [
+    "annual_income",
+    "annual_hra_received",
+    "annual_rent_paid",
+    "is_metro_city",
+    "existing_ppf",
+    "existing_epf",
+    "existing_nps",
+    "home_loan_interest_annually",
+  ],
+  ["existing_mf", "existing_fd", "existing_savings", "current_sip"],
+  [
+    "monthly_expenses",
+    "home_loan_emi",
+    "car_loan_emi",
+    "other_emi",
+    "has_term_insurance",
+    "term_cover_amount",
+    "has_health_insurance",
+    "health_cover_amount",
+  ],
+];
 
 const STEPS = [
   { title: "Personal & Goals", icon: Target },
@@ -148,65 +209,75 @@ function formatINR(val: number) {
   return `₹${val.toLocaleString("en-IN")}`;
 }
 
-function InputField({
+function InputWrapper({
   label,
   name,
-  value,
-  onChange,
-  type = "text",
   prefix,
   suffix,
   placeholder,
+  type = "text",
   min,
   max,
+  form,
 }: {
   label: string;
-  name: string;
-  value: string | number;
-  onChange: (name: string, value: string | number) => void;
-  type?: string;
+  name: keyof FormData;
   prefix?: string;
   suffix?: string;
   placeholder?: string;
+  type?: string;
   min?: number;
   max?: number;
+  form: any;
 }) {
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium text-muted-foreground/80">
-        {label}
-      </Label>
-      <div className="relative group">
-        {prefix && (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60 transition-colors group-focus-within:text-primary">
-            {prefix}
-          </span>
-        )}
-        <Input
-          type={type}
-          value={value}
-          onChange={(e) =>
-            onChange(
-              name,
-              type === "number" ? Number(e.target.value) : e.target.value,
-            )
-          }
-          placeholder={placeholder}
-          min={min}
-          max={max}
-          className={cn(
-            "h-11 bg-muted/30 border-border/50 focus-visible:ring-primary/20",
-            prefix && "pl-8",
-            suffix && "pr-12",
-          )}
-        />
-        {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/60">
-            {suffix}
-          </span>
-        )}
-      </div>
-    </div>
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="space-y-2">
+          <FormLabel className="text-sm font-medium text-muted-foreground/80">
+            {label}
+          </FormLabel>
+          <div className="relative group">
+            {prefix && (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/60 transition-colors group-focus-within:text-primary">
+                {prefix}
+              </span>
+            )}
+            <FormControl>
+              <Input
+                {...field}
+                type={type}
+                placeholder={placeholder}
+                min={min}
+                max={max}
+                className={cn(
+                  "h-11 bg-muted/30 border-border/50 focus-visible:ring-primary/20",
+                  prefix && "pl-8",
+                  suffix && "pr-12",
+                )}
+                onChange={(e) => {
+                  const val =
+                    type === "number"
+                      ? e.target.value === ""
+                        ? ""
+                        : Number(e.target.value)
+                      : e.target.value;
+                  field.onChange(val);
+                }}
+              />
+            </FormControl>
+            {suffix && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/60">
+                {suffix}
+              </span>
+            )}
+          </div>
+          <FormMessage className="text-[10px] text-destructive" />
+        </FormItem>
+      )}
+    />
   );
 }
 
@@ -214,24 +285,113 @@ function InputField({
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
-  const [data, setData] = useState<FormData>(INITIAL_DATA);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // Asset Step State
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: INITIAL_DATA,
+    mode: "onChange",
+    shouldUnregister: false,
+  });
+
+  const data = form.watch();
+
   const [assetTab, setAssetTab] = useState<"setu" | "cas" | "manual">("setu");
   const [casUploading, setCasUploading] = useState(false);
   const [casResult, setCasResult] = useState<any>(null);
-  const [setuResult, setSetuResult] = useState<any>(null);
+
+  // SETU-specific flow state
+  const [setuFlowStep, setSetuFlowStep] = useState<
+    "form" | "consent_pending" | "fetching_data" | "data_loaded" | "error"
+  >("form");
+  const [setuConsentId, setSetuConsentId] = useState<string | null>(null);
+  const [setuConsentUrl, setSetuConsentUrl] = useState<string | null>(null);
+  const [setuFiData, setSetuFiData] = useState<any[] | null>(null);
+  const [setuError, setSetuError] = useState<string | null>(null);
+  const fetchingRef = useRef(false);
+
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoaded } = useUser();
 
-  // ── Onboarding gate ──
+  // ── Initialization Logic (Storage + Clerk) ──
   useEffect(() => {
-    if (!isLoaded || !user) return;
+    if (!isLoaded || !user || isInitialized) return;
 
-    const checkOnboarding = async () => {
+    const initialize = async () => {
+      // 1. Try loading from localStorage first
+      const savedData = localStorage.getItem("onboarding_form_data");
+      const savedStep = localStorage.getItem("onboarding_step");
+      const savedAssetTab = localStorage.getItem("onboarding_asset_tab");
+      const savedCasResult = localStorage.getItem("onboarding_cas_result");
+      const savedSetuResult = localStorage.getItem("onboarding_setu_result");
+
+      // Load SETU flow state from storage if it exists
+      const storedSetuFlow = localStorage.getItem("onboarding_setu_flow_step");
+      const storedSetuConsentId = localStorage.getItem(
+        "onboarding_setu_consent_id",
+      );
+      const storedSetuConsentUrl = localStorage.getItem(
+        "onboarding_setu_consent_url",
+      );
+
+      // Check for SETU redirect back
+      const consentStatus = searchParams.get("consent_status");
+      const setuSuccess = searchParams.get("success");
+      const setuConsentIdParam = searchParams.get("id");
+      const isConsentRedirect = consentStatus === "success" || setuSuccess === "true";
+      const effectiveConsentId = setuConsentIdParam || storedSetuConsentId;
+
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          form.reset({ ...INITIAL_DATA, ...parsed });
+        } catch (e) {}
+      }
+      if (savedStep) setStep(parseInt(savedStep, 10));
+      if (savedAssetTab)
+        setAssetTab(savedAssetTab as "setu" | "cas" | "manual");
+
+      if (savedCasResult) {
+        try {
+          setCasResult(JSON.parse(savedCasResult));
+        } catch (e) {}
+      }
+
+      // Restore SETU flow state
+      if (isConsentRedirect && effectiveConsentId) {
+        setSetuConsentId(effectiveConsentId);
+        setSetuConsentUrl(storedSetuConsentUrl);
+        setSetuFlowStep("consent_pending");
+        if (!storedSetuConsentId && setuConsentIdParam) {
+          localStorage.setItem("onboarding_setu_consent_id", setuConsentIdParam);
+        }
+        // Clear query params
+        const url = new URL(window.location.href);
+        url.searchParams.delete("consent_status");
+        url.searchParams.delete("success");
+        url.searchParams.delete("id");
+        window.history.replaceState({}, "", url.pathname + (url.search || ""));
+      } else if (storedSetuFlow) {
+        setSetuFlowStep(storedSetuFlow as any);
+        setSetuConsentId(storedSetuConsentId);
+        setSetuConsentUrl(storedSetuConsentUrl);
+      }
+
+      if (savedSetuResult) {
+        try {
+          const parsedFi = JSON.parse(savedSetuResult);
+          if (Array.isArray(parsedFi)) {
+            setSetuFiData(parsedFi);
+            setSetuFlowStep("data_loaded");
+          }
+        } catch (e) {}
+      }
+
+      // 2. Clerk Gate & User Check
       try {
         const payload = {
           clerk_user_id: user.id,
@@ -254,25 +414,136 @@ export default function OnboardingPage() {
           router.replace("/dashboard");
           return;
         }
-      } catch {
-        // Backend unreachable — allow onboarding to proceed
+      } catch (err) {
+        // Continue even if backend is down
       }
-      // Pre-fill name if empty
-      setData((d) => ({
-        ...d,
-        name: d.name || `${user.firstName || ""} ${user.lastName || ""}`.trim(),
-      }));
+
+      // 3. Final Default (Clerk Pre-fill) only if still empty after storage
+      if (!form.getValues("name")) {
+        form.setValue(
+          "name",
+          `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+        );
+      }
+
+      setIsInitialized(true);
       setChecking(false);
     };
 
-    checkOnboarding();
-  }, [user, isLoaded, router]);
+    initialize();
+  }, [isLoaded, user, form, isInitialized, router, searchParams]);
+
+  // ── Sync Persistence (Watchers) ──
+  useEffect(() => {
+    if (!isInitialized) return;
+    const subscription = form.watch((value) => {
+      localStorage.setItem("onboarding_form_data", JSON.stringify(value));
+    });
+    return () => subscription.unsubscribe();
+  }, [form, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    localStorage.setItem("onboarding_step", step.toString());
+  }, [step, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    localStorage.setItem("onboarding_asset_tab", assetTab);
+  }, [assetTab, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized || !casResult) return;
+    localStorage.setItem("onboarding_cas_result", JSON.stringify(casResult));
+  }, [casResult, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    localStorage.setItem("onboarding_setu_flow_step", setuFlowStep);
+    if (setuConsentId)
+      localStorage.setItem("onboarding_setu_consent_id", setuConsentId);
+    if (setuConsentUrl)
+      localStorage.setItem("onboarding_setu_consent_url", setuConsentUrl);
+  }, [setuFlowStep, setuConsentId, setuConsentUrl, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized || !setuFiData) return;
+    localStorage.setItem("onboarding_setu_result", JSON.stringify(setuFiData));
+  }, [setuFiData, isInitialized]);
+
+  // ── SETU Flow Handlers ──
+  const handleSetuConsentCreated = useCallback((id: string, url: string) => {
+    setSetuConsentId(id);
+    setSetuConsentUrl(url);
+    setSetuFlowStep("consent_pending");
+  }, []);
+
+  const pollSessionForData = async (
+    sessionId: string,
+    consentId: string,
+    maxPolls: number = 10,
+    interval: number = 5000,
+  ): Promise<boolean> => {
+    for (let poll = 0; poll < maxPolls; poll++) {
+      if (poll > 0)
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      const res = await fetch(`/api/setu/data?sessionId=${sessionId}`);
+      const data = await res.json();
+      if (
+        (data.status === "COMPLETED" || data.status === "PARTIAL") &&
+        data.payload &&
+        Array.isArray(data.payload)
+      ) {
+        setSetuFiData(data.payload);
+        setSetuFlowStep("data_loaded");
+        return true;
+      }
+      if (data.status === "FAILED") return false;
+    }
+    return false;
+  };
+
+  const handleSetuConsentApproved = useCallback(async (consId: string) => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    setSetuFlowStep("fetching_data");
+    try {
+      const res = await fetch("/api/setu/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consentId: consId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.sessionId) {
+        await pollSessionForData(data.sessionId, consId);
+      } else {
+        throw new Error(data.error || "Failed session");
+      }
+    } catch (err: any) {
+      setSetuError(err.message);
+      setSetuFlowStep("error");
+    } finally {
+      fetchingRef.current = false;
+    }
+  }, []);
+
+  const handleSetuReset = useCallback(() => {
+    setSetuFlowStep("form");
+    setSetuConsentId(null);
+    setSetuConsentUrl(null);
+    setSetuFiData(null);
+    setSetuError(null);
+    localStorage.removeItem("onboarding_setu_flow_step");
+    localStorage.removeItem("onboarding_setu_consent_id");
+    localStorage.removeItem("onboarding_setu_consent_url");
+    localStorage.removeItem("onboarding_setu_result");
+  }, []);
 
   const update = useCallback(
-    (name: string, value: string | number | boolean) => {
-      setData((prev) => ({ ...prev, [name]: value }));
+    (name: any, value: any) => {
+      form.setValue(name, value);
     },
-    [],
+    [form],
   );
 
   // ── CAS Upload Handler ──
@@ -320,13 +591,16 @@ export default function OnboardingPage() {
   };
 
   // ── Submission Handler ──
-  const handleSubmit = async () => {
+  const handleSubmit = async (values: FormData) => {
     if (!user) return;
     setLoading(true);
     try {
       const payload = {
         clerk_user_id: user.id,
-        ...data,
+        ...values,
+        asset_tab: assetTab,
+        cas_data: casResult,
+        setu_data: setuFiData,
       };
 
       const res = await fetch("/api/advisor/session", {
@@ -339,6 +613,16 @@ export default function OnboardingPage() {
 
       if (res.ok) {
         localStorage.setItem("advisor_user_id", responseData.user_id);
+
+        // Clean up all onboarding persistence
+        localStorage.removeItem("onboarding_form_data");
+        localStorage.removeItem("onboarding_step");
+        localStorage.removeItem("onboarding_asset_tab");
+        localStorage.removeItem("onboarding_cas_result");
+        localStorage.removeItem("onboarding_setu_result");
+        localStorage.removeItem("onboarding_setu_flow_step");
+        localStorage.removeItem("onboarding_setu_consent_id");
+        localStorage.removeItem("onboarding_setu_consent_url");
 
         // Let the backend start building the first plan asynchronously
         fetch(`/api/advisor/plan/generate`, {
@@ -358,42 +642,44 @@ export default function OnboardingPage() {
     }
   };
 
-  // ── Render Steps ──
   const renderStep = () => {
     switch (step) {
       case 0: // Personal & Goals
         return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div
+            key="step-0"
+            className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <InputField
+              <InputWrapper
+                key="name"
                 label="Full Name"
                 name="name"
-                value={data.name}
-                onChange={update}
+                form={form}
                 placeholder="John Doe"
               />
-              <InputField
+              <InputWrapper
+                key="age"
                 label="Current Age"
                 name="age"
-                value={data.age}
-                onChange={update}
+                form={form}
                 type="number"
                 min={18}
                 max={100}
                 suffix="yrs"
               />
-              <InputField
+              <InputWrapper
+                key="city"
                 label="City"
                 name="city"
-                value={data.city}
-                onChange={update}
+                form={form}
                 placeholder="Mumbai"
               />
-              <InputField
+              <InputWrapper
+                key="dependents"
                 label="Dependents"
                 name="dependents"
-                value={data.dependents}
-                onChange={update}
+                form={form}
                 type="number"
                 min={0}
                 placeholder="0"
@@ -413,7 +699,12 @@ export default function OnboardingPage() {
                   return (
                     <button
                       key={g.value}
-                      onClick={() => update("primary_goal", g.value)}
+                      type="button"
+                      onClick={() =>
+                        form.setValue("primary_goal", g.value, {
+                          shouldValidate: true,
+                        })
+                      }
                       className={cn(
                         "rounded-xl border px-5 py-4 text-left text-sm transition-all duration-200 group relative overflow-hidden",
                         isSelected
@@ -441,30 +732,30 @@ export default function OnboardingPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <InputField
+              <InputWrapper
+                key="target_retirement_age"
                 label="Target Retirement Age"
                 name="target_retirement_age"
-                value={data.target_retirement_age}
-                onChange={update}
+                form={form}
                 type="number"
                 min={data.age + 1}
                 max={75}
                 suffix="years"
               />
-              <InputField
+              <InputWrapper
+                key="target_monthly_draw"
                 label="Target Monthly Draw"
                 name="target_monthly_draw"
-                value={data.target_monthly_draw}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
                 suffix="/mo"
               />
-              <InputField
+              <InputWrapper
+                key="investment_horizon_years"
                 label="Investment Horizon"
                 name="investment_horizon_years"
-                value={data.investment_horizon_years}
-                onChange={update}
+                form={form}
                 type="number"
                 min={1}
                 max={40}
@@ -479,7 +770,11 @@ export default function OnboardingPage() {
               </Label>
               <RadioGroup
                 value={data.risk_appetite}
-                onValueChange={(val) => update("risk_appetite", val)}
+                onValueChange={(val) =>
+                  form.setValue("risk_appetite", val, {
+                    shouldValidate: true,
+                  })
+                }
                 className="grid grid-cols-1 sm:grid-cols-3 gap-3"
               >
                 {RISK_OPTIONS.map((r) => (
@@ -521,29 +816,32 @@ export default function OnboardingPage() {
 
       case 1: // Income & Tax
         return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div
+            key="step-1"
+            className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
-              <InputField
+              <InputWrapper
+                key="annual_income"
                 label="Gross Annual Salary"
                 name="annual_income"
-                value={data.annual_income}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
-              <InputField
+              <InputWrapper
+                key="annual_hra_received"
                 label="Annual HRA Received"
                 name="annual_hra_received"
-                value={data.annual_hra_received}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
-              <InputField
+              <InputWrapper
+                key="annual_rent_paid"
                 label="Annual Rent Paid"
                 name="annual_rent_paid"
-                value={data.annual_rent_paid}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
@@ -552,7 +850,11 @@ export default function OnboardingPage() {
                   <input
                     type="checkbox"
                     checked={data.is_metro_city}
-                    onChange={(e) => update("is_metro_city", e.target.checked)}
+                    onChange={(e) =>
+                      form.setValue("is_metro_city", e.target.checked, {
+                        shouldValidate: true,
+                      })
+                    }
                     className="rounded border-border w-4 h-4 text-primary focus:ring-primary/20"
                   />
                   <div className="flex flex-col">
@@ -577,35 +879,35 @@ export default function OnboardingPage() {
                 </h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <InputField
+                <InputWrapper
+                  key="existing_ppf"
                   label="Current PPF Balance"
                   name="existing_ppf"
-                  value={data.existing_ppf}
-                  onChange={update}
+                  form={form}
                   type="number"
                   prefix="₹"
                 />
-                <InputField
+                <InputWrapper
+                  key="existing_epf"
                   label="Current EPF Balance"
                   name="existing_epf"
-                  value={data.existing_epf}
-                  onChange={update}
+                  form={form}
                   type="number"
                   prefix="₹"
                 />
-                <InputField
+                <InputWrapper
+                  key="existing_nps"
                   label="Current NPS Balance"
                   name="existing_nps"
-                  value={data.existing_nps}
-                  onChange={update}
+                  form={form}
                   type="number"
                   prefix="₹"
                 />
-                <InputField
+                <InputWrapper
+                  key="home_loan_interest_annually"
                   label="Home Loan Interest (Annual)"
                   name="home_loan_interest_annually"
-                  value={data.home_loan_interest_annually}
-                  onChange={update}
+                  form={form}
                   type="number"
                   prefix="₹"
                 />
@@ -616,7 +918,10 @@ export default function OnboardingPage() {
 
       case 2: // Assets (Three paths)
         return (
-          <div className="space-y-6 animate-in fade-in duration-500">
+          <div
+            key="step-2"
+            className="space-y-6 animate-in fade-in duration-500"
+          >
             <Tabs
               value={assetTab}
               onValueChange={(val: any) => setAssetTab(val)}
@@ -625,56 +930,101 @@ export default function OnboardingPage() {
               <TabsList className="grid w-full grid-cols-3 h-12 bg-muted/50 p-1 rounded-xl">
                 <TabsTrigger
                   value="setu"
-                  className="rounded-lg data-[state=active]:shadow-sm"
+                  className="rounded-lg data-[state=active]:shadow-sm data-[state=active]:text-accent font-bold"
                 >
-                  SETU (Auto)
+                  SETU (Fast)
                 </TabsTrigger>
                 <TabsTrigger
                   value="cas"
-                  className="rounded-lg data-[state=active]:shadow-sm"
+                  className="rounded-lg data-[state=active]:shadow-sm data-[state=active]:text-accent"
                 >
-                  CAS Upload
+                  CAS PDF
                 </TabsTrigger>
                 <TabsTrigger
                   value="manual"
-                  className="rounded-lg data-[state=active]:shadow-sm"
+                  className="rounded-lg data-[state=active]:shadow-sm data-[state=active]:text-accent"
                 >
                   Manual
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="setu" className="mt-8">
-                <Card className="border-border/40 bg-card/30 backdrop-blur-sm overflow-hidden border-2">
-                  <CardContent className="pt-8 pb-10">
-                    {setuResult ? (
-                      <div className="flex flex-col items-center text-center space-y-4">
-                        <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                          <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                {setuFlowStep === "form" && (
+                  <div className="bg-card/30 rounded-2xl border-2 border-border/40 p-10">
+                    <ConsentForm onConsentCreated={handleSetuConsentCreated} />
+                  </div>
+                )}
+
+                {setuFlowStep === "consent_pending" && setuConsentId && (
+                  <div className="bg-card/30 rounded-2xl border-2 border-border/40 p-10">
+                    <ConsentStatusTracker
+                      consentId={setuConsentId}
+                      consentUrl={setuConsentUrl || ""}
+                      onConsentApproved={handleSetuConsentApproved}
+                      onError={setSetuError}
+                    />
+                  </div>
+                )}
+
+                {setuFlowStep === "fetching_data" && (
+                  <div className="bg-card/30 rounded-2xl border-2 border-border/40 p-16 text-center">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-6" />
+                    <h2 className="text-2xl font-bold mb-3 font-display">
+                      Connecting Your Assets
+                    </h2>
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                      Securely retrieving your portfolio from linked accounts...
+                    </p>
+                  </div>
+                )}
+
+                {setuFlowStep === "data_loaded" && setuFiData && (
+                  <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-emerald-500/10 rounded-xl">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                         </div>
-                        <div className="space-y-1">
-                          <h4 className="font-bold text-xl text-foreground">
-                            Accounts Linked
-                          </h4>
-                          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                            Your portfolios are now securely connected via SETU
-                            Account Aggregator.
+                        <div>
+                          <h2 className="text-lg font-bold text-foreground">
+                            Accounts Linked Successfully
+                          </h2>
+                          <p className="text-sm text-muted-foreground">
+                            Your portfolio overview is ready
                           </p>
                         </div>
                       </div>
-                    ) : (
-                      <div className="max-w-md mx-auto">
-                        <ConsentForm
-                          onConsentCreated={(id, url) => {
-                            setTimeout(
-                              () => setSetuResult({ success: true }),
-                              2000,
-                            );
-                          }}
-                        />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      <button
+                        type="button"
+                        onClick={handleSetuReset}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold border border-emerald-500/20 hover:bg-emerald-500/10 transition-all text-emerald-600 uppercase tracking-widest"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Re-Link Accounts
+                      </button>
+                    </div>
+                    <FinancialSummary data={setuFiData} />
+                  </div>
+                )}
+
+                {setuFlowStep === "error" && (
+                  <div className="bg-card/30 rounded-2xl border-2 border-border/40 p-12 text-center">
+                    <div className="p-4 bg-destructive/10 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
+                      <RotateCcw className="w-8 h-8 text-destructive" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Connection Error</h3>
+                    <p className="text-sm text-muted-foreground mb-8 max-w-xs mx-auto">
+                      {setuError || "Failed to link accounts."}
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={handleSetuReset}
+                      className="rounded-xl px-8"
+                    >
+                      Try Linking Again
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="cas" className="mt-8">
@@ -746,35 +1096,35 @@ export default function OnboardingPage() {
                       </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <InputField
+                      <InputWrapper
+                        key="existing_mf"
                         label="Mutual Funds & Equity"
                         name="existing_mf"
-                        value={data.existing_mf}
-                        onChange={update}
+                        form={form}
                         type="number"
                         prefix="₹"
                       />
-                      <InputField
+                      <InputWrapper
+                        key="existing_fd"
                         label="Fixed Deposits / Bonds"
                         name="existing_fd"
-                        value={data.existing_fd}
-                        onChange={update}
+                        form={form}
                         type="number"
                         prefix="₹"
                       />
-                      <InputField
+                      <InputWrapper
+                        key="existing_savings"
                         label="Savings & Cash"
                         name="existing_savings"
-                        value={data.existing_savings}
-                        onChange={update}
+                        form={form}
                         type="number"
                         prefix="₹"
                       />
-                      <InputField
+                      <InputWrapper
+                        key="current_sip"
                         label="Current Monthly SIP"
                         name="current_sip"
-                        value={data.current_sip}
-                        onChange={update}
+                        form={form}
                         type="number"
                         prefix="₹"
                         suffix="/mo"
@@ -789,37 +1139,40 @@ export default function OnboardingPage() {
 
       case 3: // Liabilities & Risk
         return (
-          <div className="space-y-8 animate-in fade-in duration-500">
+          <div
+            key="step-3"
+            className="space-y-8 animate-in fade-in duration-500"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <InputField
+              <InputWrapper
+                key="monthly_expenses"
                 label="Total Monthly Expenses"
                 name="monthly_expenses"
-                value={data.monthly_expenses}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
-              <InputField
+              <InputWrapper
+                key="home_loan_emi"
                 label="Home Loan EMI"
                 name="home_loan_emi"
-                value={data.home_loan_emi}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
-              <InputField
+              <InputWrapper
+                key="car_loan_emi"
                 label="Car Loan EMI"
                 name="car_loan_emi"
-                value={data.car_loan_emi}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
-              <InputField
+              <InputWrapper
+                key="other_emi"
                 label="Other EMIs / Debt"
                 name="other_emi"
-                value={data.other_emi}
-                onChange={update}
+                form={form}
                 type="number"
                 prefix="₹"
               />
@@ -851,7 +1204,11 @@ export default function OnboardingPage() {
                         id="has-term"
                         checked={data.has_term_insurance}
                         onChange={(e) =>
-                          update("has_term_insurance", e.target.checked)
+                          form.setValue(
+                            "has_term_insurance",
+                            e.target.checked,
+                            { shouldValidate: true },
+                          )
                         }
                         className="rounded border-border w-5 h-5 text-primary focus:ring-primary/20"
                       />
@@ -866,11 +1223,11 @@ export default function OnboardingPage() {
                     </Label>
                     {data.has_term_insurance && (
                       <div className="animate-in slide-in-from-top-2">
-                        <InputField
+                        <InputWrapper
+                          key="term_cover_amount"
                           label="Total Sum Assured"
                           name="term_cover_amount"
-                          value={data.term_cover_amount}
-                          onChange={update}
+                          form={form}
                           type="number"
                           prefix="₹"
                         />
@@ -896,7 +1253,11 @@ export default function OnboardingPage() {
                         id="has-health"
                         checked={data.has_health_insurance}
                         onChange={(e) =>
-                          update("has_health_insurance", e.target.checked)
+                          form.setValue(
+                            "has_health_insurance",
+                            e.target.checked,
+                            { shouldValidate: true },
+                          )
                         }
                         className="rounded border-border w-5 h-5 text-primary focus:ring-primary/20"
                       />
@@ -911,11 +1272,11 @@ export default function OnboardingPage() {
                     </Label>
                     {data.has_health_insurance && (
                       <div className="animate-in slide-in-from-top-2">
-                        <InputField
+                        <InputWrapper
+                          key="health_cover_amount"
                           label="Total Cover Amount"
                           name="health_cover_amount"
-                          value={data.health_cover_amount}
-                          onChange={update}
+                          form={form}
                           type="number"
                           prefix="₹"
                         />
@@ -988,7 +1349,7 @@ export default function OnboardingPage() {
                   items: [
                     [
                       "Asset Link",
-                      setuResult
+                      setuFiData && setuFiData.length > 0
                         ? "SETU (Auto)"
                         : casResult
                           ? "CAS (PDF)"
@@ -1043,18 +1404,19 @@ export default function OnboardingPage() {
             </Card>
           </div>
         );
-
-      default:
-        return null;
     }
   };
 
-  const handleNext = () => {
-    // Basic validations
-    if (step === 0 && (!data.name || !data.age)) {
-      alert("Name and age are required.");
-      return;
+  const handleNext = async () => {
+    // Validate current step fields
+    const fieldsToValidate = STEP_FIELDS[step];
+    if (fieldsToValidate) {
+      const isValid = await form.trigger(fieldsToValidate);
+      if (!isValid) {
+        return;
+      }
     }
+
     if (step < STEPS.length - 1) setStep(step + 1);
   };
 
@@ -1207,7 +1569,17 @@ export default function OnboardingPage() {
             </h1>
           </div>
 
-          <div className="w-full">{renderStep()}</div>
+          <div className="w-full">
+            <Form {...form}>
+              <form
+                id="onboarding-form"
+                onSubmit={form.handleSubmit(handleSubmit)}
+                className="space-y-6"
+              >
+                {renderStep()}
+              </form>
+            </Form>
+          </div>
 
           {/* Navigation */}
           <div className="mt-14 flex items-center justify-between pt-8 border-t border-border/50">
@@ -1226,8 +1598,19 @@ export default function OnboardingPage() {
 
             <Button
               size="lg"
-              onClick={step === STEPS.length - 1 ? handleSubmit : handleNext}
-              disabled={loading}
+              onClick={
+                step === STEPS.length - 1
+                  ? form.handleSubmit(handleSubmit)
+                  : handleNext
+              }
+              disabled={
+                loading ||
+                casUploading ||
+                (step === 2 &&
+                  assetTab === "setu" &&
+                  (setuFlowStep === "consent_pending" ||
+                    setuFlowStep === "fetching_data"))
+              }
               className="h-12 px-10 rounded-xl bg-primary text-primary-foreground font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300"
             >
               {loading ? (

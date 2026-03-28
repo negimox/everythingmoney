@@ -7,11 +7,11 @@ export default function LoginPage() {
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex justify-center gap-2 md:justify-start">
           <a href="#" className="flex items-center gap-2 font-medium">
-            <Image 
-              src="/logo.png" 
-              alt="Everything Money" 
-              width={160} 
-              height={40} 
+            <Image
+              src="/logo.png"
+              alt="Everything Money"
+              width={160}
+              height={40}
               className="h-8 w-auto object-contain"
             />
           </a>
@@ -32,7 +32,8 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-linear-to-t from-background/80 via-background/20 to-transparent" />
         <div className="absolute bottom-8 left-8 right-8">
           <p className="text-lg font-semibold text-foreground/90">
-            &ldquo;Everything Money transformed how I analyze the Indian stock market. The real-time insights are incredible.&rdquo;
+            &ldquo;Everything Money transformed how I analyze the Indian stock
+            market. The real-time insights are incredible.&rdquo;
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             &mdash; Professional Trader

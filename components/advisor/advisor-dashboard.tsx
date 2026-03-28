@@ -84,38 +84,56 @@ export default function AdvisorDashboard() {
   // Fetch plan
   const fetchPlan = useCallback(async () => {
     if (!userId) return;
-    setLoading(true);
+    
+    // Set a timeout to cancel polling if component unmounts
+    let timeoutId: NodeJS.Timeout;
+
     try {
       const res = await fetch(`/api/advisor/plan?user_id=${userId}`);
       if (res.status === 404) {
-        router.replace("/onboarding");
+        setError("Generating your personalized financial plan... This usually takes 10-30 seconds.");
+        timeoutId = setTimeout(fetchPlan, 5000);
         return;
       }
+      
       const data = await res.json();
       if (data.success && data.plan?.plan) {
         setPlan(data.plan.plan);
+        setError(null);
+        setLoading(false);
       } else {
-        setError("No plan found. Please complete onboarding first.");
-        router.replace("/onboarding");
+        setError("Finalizing your plan structure...");
+        timeoutId = setTimeout(fetchPlan, 5000);
       }
     } catch {
-      setError("Failed to load financial plan");
-    } finally {
-      setLoading(false);
+      setError("Waiting for backend processing to complete...");
+      timeoutId = setTimeout(fetchPlan, 5000);
     }
+
+    return () => clearTimeout(timeoutId);
   }, [userId]);
 
   useEffect(() => {
-    if (userId) fetchPlan();
+    let cancel = () => {};
+    if (userId) {
+      const p = fetchPlan();
+      if (p instanceof Promise) {
+        p.then(c => { if (c) cancel = c; });
+      }
+    }
+    return () => cancel();
   }, [userId, fetchPlan]);
 
   // Loading state
   if (loading || !isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading your financial plan...</p>
+        <div className="text-center space-y-4 max-w-sm mx-auto">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+          <h3 className="font-bold text-lg">Building Your Plan</h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {error || "Loading your financial profile..."}
+          </p>
         </div>
       </div>
     );

@@ -5,9 +5,10 @@ import { Loader2, Smartphone, ArrowRight, ShieldCheck } from "lucide-react";
 
 interface ConsentFormProps {
   onConsentCreated: (consentId: string, consentUrl: string) => void;
+  redirectUrl?: string;
 }
 
-export default function ConsentForm({ onConsentCreated }: ConsentFormProps) {
+export default function ConsentForm({ onConsentCreated, redirectUrl }: ConsentFormProps) {
   const [mobileNumber, setMobileNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,10 +23,14 @@ export default function ConsentForm({ onConsentCreated }: ConsentFormProps) {
     setError(null);
 
     try {
+      const finalRedirectUrl =
+        redirectUrl ||
+        `${window.location.origin}${window.location.pathname}?consent_status=success`;
+
       const res = await fetch("/api/setu/consent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobileNumber }),
+        body: JSON.stringify({ mobileNumber, redirectUrl: finalRedirectUrl }),
       });
 
       const data = await res.json();
@@ -60,7 +65,7 @@ export default function ConsentForm({ onConsentCreated }: ConsentFormProps) {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="space-y-5">
         <div>
           <label
             htmlFor="mobile-number"
@@ -84,6 +89,12 @@ export default function ConsentForm({ onConsentCreated }: ConsentFormProps) {
               maxLength={10}
               placeholder="Enter 10-digit number"
               value={mobileNumber}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }
+              }}
               onChange={(e) => {
                 const cleaned = e.target.value.replace(/\D/g, "").slice(0, 10);
                 setMobileNumber(cleaned);
@@ -106,7 +117,11 @@ export default function ConsentForm({ onConsentCreated }: ConsentFormProps) {
         )}
 
         <button
-          type="submit"
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            handleSubmit(e as any);
+          }}
           disabled={!isValid || loading}
           className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
@@ -122,7 +137,7 @@ export default function ConsentForm({ onConsentCreated }: ConsentFormProps) {
             </>
           )}
         </button>
-      </form>
+      </div>
 
       {/* Trust badges */}
       <div className="mt-8 pt-6 border-t border-border/30">
