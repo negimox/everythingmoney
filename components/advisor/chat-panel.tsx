@@ -1,13 +1,50 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Bot, User, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { RefreshCw, Sparkles } from "lucide-react";
+import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+  type AttachmentFile,
+} from "@/components/ai-elements/attachments";
+import {
+  PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputHeader,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+  usePromptInputAttachments,
+  type PromptInputMessage,
+} from "@/components/ai-elements/prompt-input";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import { Reasoning } from "@/components/ai-elements/reasoning";
+import { Task, TaskItem } from "@/components/ai-elements/task";
+import { Tool } from "@/components/ai-elements/tool";
 
-interface Message {
+interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp?: string;
   triggered_replan?: boolean;
+  attachments?: AttachmentFile[];
 }
 
 interface ChatPanelProps {
@@ -16,25 +53,102 @@ interface ChatPanelProps {
   fullHeight?: boolean;
 }
 
+function PromptInputAttachmentsDisplay({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
+  const attachments = usePromptInputAttachments();
+  if (attachments.files.length === 0) return null;
+  return (
+    <Attachments variant="inline" className={compact ? "px-1" : undefined}>
+      {attachments.files.map((file) => (
+        <Attachment
+          key={file.id}
+          data={file}
+          onRemove={() => attachments.remove(file.id)}
+        >
+          <AttachmentPreview data={file} />
+          <AttachmentInfo data={file} />
+          <AttachmentRemove onRemove={() => attachments.remove(file.id)} />
+        </Attachment>
+      ))}
+    </Attachments>
+  );
+}
+
+function HeroComposer({ loading }: { loading: boolean }) {
+  return (
+    <div className="mx-auto w-full max-w-4xl">
+      <div className="mb-5 text-left">
+        <p className="inline-flex items-center gap-2 text-3xl font-semibold tracking-tight text-foreground">
+          <Sparkles className="h-6 w-6 text-primary" />
+          Where should we start?
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Ask about retirement, taxes, SIP allocation, or profile updates.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-border/50 bg-background/70 shadow-[0_8px_40px_-20px_rgba(0,0,0,0.7)] backdrop-blur">
+        <PromptInputHeader className="border-b-0 pb-0">
+          <PromptInputAttachmentsDisplay compact />
+        </PromptInputHeader>
+        <PromptInputBody className="pt-2">
+          <PromptInputTextarea
+            placeholder="Ask your financial co-pilot..."
+            disabled={loading}
+            className="min-h-[72px] text-base"
+          />
+        </PromptInputBody>
+        <PromptInputFooter className="border-t-0 pt-0">
+          <PromptInputTools>
+            <PromptInputActionAddAttachments />
+          </PromptInputTools>
+          <PromptInputSubmit loading={loading} />
+        </PromptInputFooter>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPanel({
   userId,
   onReplanNeeded,
   fullHeight = false,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [replanning, setReplanning] = useState(false);
+  const [openReasoning, setOpenReasoning] = useState<Record<number, boolean>>(
+    {},
+  );
+  const [openTool, setOpenTool] = useState<Record<number, boolean>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
+  const showConversation = messages.length > 0;
 
-  // Load chat history on mount
   useEffect(() => {
+    const cacheKey = `advisor-chat-cache:${userId}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as ChatMessage[];
+        if (Array.isArray(parsed)) setMessages(parsed);
+      }
+    } catch (err) {
+      console.error("Failed to load local chat cache:", err);
+    }
+
     const loadHistory = async () => {
       try {
         const res = await fetch(`/api/advisor/chat/history?user_id=${userId}`);
         const data = await res.json();
-        if (data.success && data.messages) {
-          setMessages(data.messages);
+        if (data.success && Array.isArray(data.messages)) {
+          setMessages((prev) =>
+            data.messages.length === 0 && prev.length > 0
+              ? prev
+              : data.messages,
+          );
         }
       } catch (err) {
         console.error("Failed to load chat history:", err);
@@ -43,20 +157,37 @@ export default function ChatPanel({
     if (userId) loadHistory();
   }, [userId]);
 
-  // Auto-scroll on new messages
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      localStorage.setItem(
+        `advisor-chat-cache:${userId}`,
+        JSON.stringify(messages),
+      );
+    } catch (err) {
+      console.error("Failed to persist local chat cache:", err);
+    }
+  }, [messages, userId]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages]);
+  }, [messages, loading, replanning]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  const sendMessage = async (message: PromptInputMessage) => {
+    const text = message.text?.trim() || "";
+    const hasText = Boolean(text);
+    const hasFiles = Boolean(message.files?.length);
+    if ((!hasText && !hasFiles) || loading) return;
 
-    const userMessage: Message = { role: "user", content: input.trim() };
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: text || "Sent with attachments",
+      attachments: message.files || [],
+    };
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setLoading(true);
 
     try {
@@ -66,15 +197,13 @@ export default function ChatPanel({
         body: JSON.stringify({ user_id: userId, message: userMessage.content }),
       });
       const data = await res.json();
-
-      const assistantMessage: Message = {
+      const assistantMessage: ChatMessage = {
         role: "assistant",
         content: data.reply || "Sorry, I couldn't process that.",
         triggered_replan: data.needs_replan,
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // If profile changed, trigger replan
       if (data.needs_replan) {
         setReplanning(true);
         try {
@@ -85,13 +214,11 @@ export default function ChatPanel({
             body: planForm,
           });
           onReplanNeeded?.();
-        } catch (err) {
-          console.error("Replan failed:", err);
         } finally {
           setReplanning(false);
         }
       }
-    } catch (err) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Connection error. Please try again." },
@@ -102,107 +229,146 @@ export default function ChatPanel({
   };
 
   return (
-    <div className={`rounded-xl border border-border/50 bg-card flex flex-col ${fullHeight ? "h-full" : "h-[500px]"}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
-        <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Financial Advisor</span>
-        </div>
-        {replanning && (
-          <span className="flex items-center gap-1.5 text-xs text-amber-400">
-            <RefreshCw className="w-3 h-3 animate-spin" />
-            Updating plan...
-          </span>
-        )}
-      </div>
+    <div
+      className={`w-full min-w-0 flex flex-col ${fullHeight ? "h-full" : "h-[600px]"}`}
+    >
+      {showConversation ? (
+        <div className="relative flex-1 min-h-0">
+          {replanning && (
+            <div className="absolute right-4 top-2 z-10 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Updating plan...
+            </div>
+          )}
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <Bot className="w-10 h-10 mb-3 text-primary/30" />
-            <p className="text-sm font-medium">
-              Ask me anything about your finances
-            </p>
-            <p className="text-xs mt-1">
-              Try: &quot;What if I retire at 55?&quot; or &quot;How can I save
-              more tax?&quot;
-            </p>
+          <div ref={scrollRef} className="relative flex-1 min-h-0">
+            <Conversation>
+              <ConversationContent className="pt-4">
+                {messages.map((msg, i) => (
+                  <Message from={msg.role} key={`${msg.role}-${i}`}>
+                    <MessageContent>
+                      <MessageResponse from={msg.role}>
+                        {msg.content}
+                      </MessageResponse>
+
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <Attachments variant="inline">
+                          {msg.attachments.map((file) => (
+                            <Attachment key={file.id} data={file}>
+                              <AttachmentPreview data={file} />
+                              <AttachmentInfo data={file} />
+                            </Attachment>
+                          ))}
+                        </Attachments>
+                      )}
+
+                      {msg.role === "assistant" && (
+                        <>
+                          <Reasoning
+                            open={Boolean(openReasoning[i])}
+                            onToggle={() =>
+                              setOpenReasoning((prev) => ({
+                                ...prev,
+                                [i]: !prev[i],
+                              }))
+                            }
+                            isStreaming={loading && i === messages.length - 1}
+                          >
+                            Profile loaded, intent classified, financial context
+                            reviewed, and recommendation generated from the
+                            latest user profile.
+                          </Reasoning>
+
+                          <Task title="Agent Progress">
+                            <TaskItem
+                              label="Read profile and chat context"
+                              status="completed"
+                            />
+                            <TaskItem
+                              label="Run financial reasoning"
+                              status={
+                                loading && i === messages.length - 1
+                                  ? "in_progress"
+                                  : "completed"
+                              }
+                            />
+                            <TaskItem
+                              label="Return response and replan signal"
+                              status={
+                                msg.triggered_replan ? "completed" : "pending"
+                              }
+                            />
+                          </Task>
+
+                          <Tool
+                            title="Tool invocation details"
+                            open={Boolean(openTool[i])}
+                            onToggle={() =>
+                              setOpenTool((prev) => ({
+                                ...prev,
+                                [i]: !prev[i],
+                              }))
+                            }
+                          >
+                            Backend currently returns `reply`, `needs_replan`,
+                            and `profile_updates`. Per-tool traces are not
+                            exposed yet.
+                          </Tool>
+                        </>
+                      )}
+                    </MessageContent>
+                  </Message>
+                ))}
+              </ConversationContent>
+              <ConversationScrollButton
+                onClick={() =>
+                  scrollRef.current?.scrollTo({
+                    top: scrollRef.current.scrollHeight,
+                    behavior: "smooth",
+                  })
+                }
+              />
+            </Conversation>
           </div>
-        )}
 
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-          >
-            <div
-              className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center ${
-                msg.role === "user" ? "bg-primary/10" : "bg-muted"
-              }`}
+          <div className="p-3">
+            <PromptInput
+              onSubmit={sendMessage}
+              className="w-full rounded-xl border border-border/40 bg-background/70"
             >
-              {msg.role === "user" ? (
-                <User className="w-3.5 h-3.5 text-primary" />
-              ) : (
-                <Bot className="w-3.5 h-3.5 text-muted-foreground" />
-              )}
-            </div>
-            <div
-              className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/60"
-              }`}
-            >
-              {msg.content}
-              {msg.triggered_replan && (
-                <p className="mt-2 pt-2 border-t border-amber-500/20 text-xs text-amber-400 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3" />
-                  Plan updated based on this change
-                </p>
-              )}
-            </div>
+              <PromptInputHeader className="border-b-0 pb-0">
+                <PromptInputAttachmentsDisplay compact />
+              </PromptInputHeader>
+              <PromptInputBody className="pt-2">
+                <PromptInputTextarea
+                  placeholder="Continue the conversation..."
+                  disabled={loading}
+                  className="min-h-[52px]"
+                />
+              </PromptInputBody>
+              <PromptInputFooter className="border-t-0 pt-0">
+                <PromptInputTools>
+                  <PromptInputActionAddAttachments />
+                </PromptInputTools>
+                <PromptInputSubmit loading={loading} />
+              </PromptInputFooter>
+            </PromptInput>
+            <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+              AI can make mistakes. Always review recommendations before taking
+              action.
+            </p>
           </div>
-        ))}
-
-        {loading && (
-          <div className="flex gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
-              <Bot className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <div className="bg-muted/60 rounded-xl px-4 py-3">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Input */}
-      <div className="p-3 border-t border-border/30">
-        <div className="flex items-center gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            placeholder="Ask about your financial plan..."
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-primary/50"
-            disabled={loading}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={loading || !input.trim()}
-            className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center
-              hover:bg-primary/90 transition-colors disabled:opacity-40"
-          >
-            <Send className="w-4 h-4 text-primary-foreground" />
-          </button>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
-          AI-generated guidance, not licensed financial advice
-        </p>
-      </div>
+      ) : (
+        <div className="flex h-full items-center justify-center px-4">
+          <PromptInput
+            onSubmit={sendMessage}
+            className="w-full border-none bg-transparent shadow-none"
+          >
+            <HeroComposer loading={loading} />
+          </PromptInput>
+        </div>
+      )}
     </div>
   );
 }

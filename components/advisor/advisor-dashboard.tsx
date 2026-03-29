@@ -177,7 +177,7 @@ export default function AdvisorDashboard() {
   // Chat View - Full width
   if (activeView === "chat") {
     return (
-      <div className="max-w-3xl mx-auto h-[calc(100vh-120px)]">
+      <div className="w-full h-[calc(100vh-120px)] min-w-0">
         <ChatPanel userId={userId!} onReplanNeeded={fetchPlan} fullHeight />
       </div>
     );
