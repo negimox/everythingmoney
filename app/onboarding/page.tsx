@@ -342,7 +342,8 @@ export default function OnboardingPage() {
       const consentStatus = searchParams.get("consent_status");
       const setuSuccess = searchParams.get("success");
       const setuConsentIdParam = searchParams.get("id");
-      const isConsentRedirect = consentStatus === "success" || setuSuccess === "true";
+      const isConsentRedirect =
+        consentStatus === "success" || setuSuccess === "true";
       const effectiveConsentId = setuConsentIdParam || storedSetuConsentId;
 
       if (savedData) {
@@ -367,7 +368,10 @@ export default function OnboardingPage() {
         setSetuConsentUrl(storedSetuConsentUrl);
         setSetuFlowStep("consent_pending");
         if (!storedSetuConsentId && setuConsentIdParam) {
-          localStorage.setItem("onboarding_setu_consent_id", setuConsentIdParam);
+          localStorage.setItem(
+            "onboarding_setu_consent_id",
+            setuConsentIdParam,
+          );
         }
         // Clear query params
         const url = new URL(window.location.href);
@@ -470,6 +474,78 @@ export default function OnboardingPage() {
     if (!isInitialized || !setuFiData) return;
     localStorage.setItem("onboarding_setu_result", JSON.stringify(setuFiData));
   }, [setuFiData, isInitialized]);
+
+  // ── Extract Setu data and populate form fields ──
+  useEffect(() => {
+    if (!setuFiData || !Array.isArray(setuFiData) || setuFiData.length === 0)
+      return;
+
+    // Normalize and aggregate values by type
+    let totalMutualFunds = 0;
+    let totalDeposits = 0; // FD + RD
+    let totalSavings = 0; // Savings/current accounts
+    let totalInsurance = 0;
+
+    for (const fipData of setuFiData) {
+      const accounts =
+        fipData?.data || fipData?.accounts || fipData?.Accounts || [];
+      if (!Array.isArray(accounts)) continue;
+
+      for (const rawAccount of accounts) {
+        const accountData =
+          rawAccount?.data?.account || rawAccount?.account || rawAccount;
+        const accountType = (
+          accountData?.type ||
+          rawAccount?.fiType ||
+          ""
+        ).toLowerCase();
+        const summary = accountData?.summary || accountData?.Summary || {};
+
+        // Skip failed accounts
+        if (rawAccount?.maskedAccNumber?.includes("FAILURE")) continue;
+
+        // Extract primary value based on account type
+        let value = 0;
+        if (accountType.includes("insurance")) {
+          value =
+            parseFloat(summary?.sumAssured || summary?.coverAmount || "0") || 0;
+          totalInsurance += value;
+        } else if (accountType === "mutual_funds") {
+          value = parseFloat(summary?.currentValue || "0") || 0;
+          totalMutualFunds += value;
+        } else if (
+          accountType === "term_deposit" ||
+          accountType === "recurring_deposit"
+        ) {
+          value =
+            parseFloat(
+              summary?.currentValue ||
+                summary?.maturityAmount ||
+                summary?.principalAmount ||
+                "0",
+            ) || 0;
+          totalDeposits += value;
+        } else if (accountType === "deposit") {
+          value =
+            parseFloat(
+              summary?.currentValue || summary?.currentBalance || "0",
+            ) || 0;
+          totalSavings += value;
+        }
+      }
+    }
+
+    // Populate form fields with extracted values
+    if (totalMutualFunds > 0) {
+      form.setValue("existing_mf", totalMutualFunds);
+    }
+    if (totalDeposits > 0) {
+      form.setValue("existing_fd", totalDeposits);
+    }
+    if (totalSavings > 0) {
+      form.setValue("existing_savings", totalSavings);
+    }
+  }, [setuFiData, form]);
 
   // ── SETU Flow Handlers ──
   const handleSetuConsentCreated = useCallback((id: string, url: string) => {
@@ -847,7 +923,7 @@ export default function OnboardingPage() {
               />
               <div className="flex flex-col justify-center">
                 <Label className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-muted/20 cursor-pointer transition-colors hover:bg-muted/30">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={data.is_metro_city}
                     onChange={(e) =>
@@ -1044,7 +1120,7 @@ export default function OnboardingPage() {
                     </div>
 
                     <div className="pt-4">
-                      <input
+                      <Input
                         type="file"
                         accept=".pdf"
                         onChange={handleCASUpload}
@@ -1199,7 +1275,7 @@ export default function OnboardingPage() {
                       htmlFor="has-term"
                       className="flex items-center gap-3 cursor-pointer"
                     >
-                      <input
+                      <Input
                         type="checkbox"
                         id="has-term"
                         checked={data.has_term_insurance}
@@ -1248,7 +1324,7 @@ export default function OnboardingPage() {
                       htmlFor="has-health"
                       className="flex items-center gap-3 cursor-pointer"
                     >
-                      <input
+                      <Input
                         type="checkbox"
                         id="has-health"
                         checked={data.has_health_insurance}

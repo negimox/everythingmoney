@@ -1,0 +1,8 @@
+financial advisor, giving insight and month-by-month finanacial plans for achieving a particular goal of user. Where the user will first have to go through an onboarding form ( taking information about their income, loans, assets, etc), then based on this information, the user should be able to communicate with the chatbot, which will give answers based on the user information. Then based on the chats on the main dashboard view the plan, adivces will change to reflect these chat message and changes. 
+Eg scenario of what I want to build:
+● FIRE plan for a mid-career professional: A 34-year-old software engineer earns ₹24L/year, has ₹18L in
+existing MF investments, ₹6L in PPF, and wants to retire at 50 with a monthly corpus draw of ₹1.5L
+(today's value, inflation-adjusted). The agent must produce a month-by-month plan: SIP amounts by fund
+category, asset allocation glidepath, insurance gap analysis, and estimated retirement date given current
+trajectory. The plan must update dynamically if the user changes one input (e.g. target retirement age
+from 50 to 55). Static outputs requiring a full re-run will score lower.
