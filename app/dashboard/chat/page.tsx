@@ -54,6 +54,10 @@ export default function AdvisorChatPage() {
     resolveUser();
   }, [user, isLoaded, router]);
 
+  useEffect(() => {
+    setActiveView("chat");
+  }, [setActiveView]);
+
   if (loading || !isLoaded || !userId) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -63,7 +67,7 @@ export default function AdvisorChatPage() {
   }
 
   return (
-    <div className="w-full h-[calc(100vh-140px)] min-w-0">
+    <div className="w-full h-full min-w-0 flex flex-col">
       <ChatPanel userId={userId} onReplanNeeded={() => {}} fullHeight />
     </div>
   );

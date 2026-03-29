@@ -1008,14 +1008,14 @@ function OnboardingPageContent() {
                   value="setu"
                   className="rounded-lg data-[state=active]:shadow-sm data-[state=active]:text-accent font-bold"
                 >
-                  SETU (Fast)
+                  SETU (Auto Fetching)
                 </TabsTrigger>
-                <TabsTrigger
+                {/* <TabsTrigger
                   value="cas"
                   className="rounded-lg data-[state=active]:shadow-sm data-[state=active]:text-accent"
                 >
                   CAS PDF
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger
                   value="manual"
                   className="rounded-lg data-[state=active]:shadow-sm data-[state=active]:text-accent"

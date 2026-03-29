@@ -38,19 +38,48 @@ import {
 import { Reasoning } from "@/components/ai-elements/reasoning";
 import { Task, TaskItem } from "@/components/ai-elements/task";
 import { Tool } from "@/components/ai-elements/tool";
+import {
+  useCrewEvents,
+  type CrewEvent,
+} from "@/components/advisor/use-crew-events";
+import {
+  summarizeCrewEvents,
+  formatReasoningText,
+} from "@/components/advisor/crew-events-utils";
 
 interface ChatMessage {
+  id: string;
   role: "user" | "assistant";
   content: string;
   timestamp?: string;
   triggered_replan?: boolean;
   attachments?: AttachmentFile[];
+  crewEvents?: CrewEvent[];
+  isPending?: boolean;
 }
 
 interface ChatPanelProps {
   userId: string;
   onReplanNeeded?: () => void;
   fullHeight?: boolean;
+}
+
+function normalizeChatMessage(
+  message: Partial<ChatMessage>,
+  index: number,
+): ChatMessage {
+  return {
+    id: message.id || `hist_${Date.now()}_${index}`,
+    role: (message.role === "assistant" ? "assistant" : "user") as
+      | "user"
+      | "assistant",
+    content: message.content || "",
+    timestamp: message.timestamp,
+    triggered_replan: message.triggered_replan,
+    attachments: message.attachments || [],
+    crewEvents: message.crewEvents || [],
+    isPending: Boolean(message.isPending),
+  };
 }
 
 function PromptInputAttachmentsDisplay({
@@ -124,16 +153,41 @@ export default function ChatPanel({
     {},
   );
   const [openTool, setOpenTool] = useState<Record<number, boolean>>({});
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [pendingAssistantId, setPendingAssistantId] = useState<string | null>(
+    null,
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const crewEventsRef = useRef<CrewEvent[]>([]);
   const showConversation = messages.length > 0;
+
+  // Hook into SSE events
+  const {
+    events: crewEvents,
+    clearEvents,
+    isConnected,
+  } = useCrewEvents(currentSessionId);
+
+  useEffect(() => {
+    crewEventsRef.current = crewEvents;
+    if (!pendingAssistantId) return;
+
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === pendingAssistantId ? { ...msg, crewEvents } : msg,
+      ),
+    );
+  }, [crewEvents, pendingAssistantId]);
 
   useEffect(() => {
     const cacheKey = `advisor-chat-cache:${userId}`;
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
-        const parsed = JSON.parse(cached) as ChatMessage[];
-        if (Array.isArray(parsed)) setMessages(parsed);
+        const parsed = JSON.parse(cached) as Partial<ChatMessage>[];
+        if (Array.isArray(parsed)) {
+          setMessages(parsed.map((msg, idx) => normalizeChatMessage(msg, idx)));
+        }
       }
     } catch (err) {
       console.error("Failed to load local chat cache:", err);
@@ -144,10 +198,12 @@ export default function ChatPanel({
         const res = await fetch(`/api/advisor/chat/history?user_id=${userId}`);
         const data = await res.json();
         if (data.success && Array.isArray(data.messages)) {
+          const normalized = data.messages.map(
+            (msg: Partial<ChatMessage>, idx: number) =>
+              normalizeChatMessage(msg, idx),
+          );
           setMessages((prev) =>
-            data.messages.length === 0 && prev.length > 0
-              ? prev
-              : data.messages,
+            normalized.length === 0 && prev.length > 0 ? prev : normalized,
           );
         }
       } catch (err) {
@@ -183,46 +239,105 @@ export default function ChatPanel({
     if ((!hasText && !hasFiles) || loading) return;
 
     const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
       role: "user",
       content: text || "Sent with attachments",
       attachments: message.files || [],
     };
-    setMessages((prev) => [...prev, userMessage]);
+    const assistantId = `assistant_${Date.now()}`;
+    const pendingAssistant: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "Thinking...",
+      crewEvents: [],
+      isPending: true,
+    };
+    setMessages((prev) => [...prev, userMessage, pendingAssistant]);
+    setPendingAssistantId(assistantId);
     setLoading(true);
+
+    // Generate unique session ID for this chat request
+    const sessionId = `chat_${userId}_${Date.now()}`;
+    setCurrentSessionId(sessionId);
+    clearEvents();
 
     try {
       const res = await fetch("/api/advisor/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, message: userMessage.content }),
+        body: JSON.stringify({
+          user_id: userId,
+          message: userMessage.content,
+          session_id: sessionId,
+        }),
       });
       const data = await res.json();
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content: data.reply || "Sorry, I couldn't process that.",
-        triggered_replan: data.needs_replan,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+
+      const messageEvents = [...crewEventsRef.current];
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId
+            ? {
+                ...msg,
+                content: data.reply || "Sorry, I couldn't process that.",
+                triggered_replan: data.needs_replan,
+                crewEvents: messageEvents,
+                isPending: false,
+              }
+            : msg,
+        ),
+      );
+      setCurrentSessionId(null); // Stop listening after chat response
+      setPendingAssistantId(null);
 
       if (data.needs_replan) {
         setReplanning(true);
         try {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    isPending: true,
+                  }
+                : msg,
+            ),
+          );
           const planForm = new FormData();
           planForm.append("user_id", userId);
           await fetch("/api/advisor/plan/regenerate", {
             method: "POST",
             body: planForm,
           });
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    isPending: false,
+                  }
+                : msg,
+            ),
+          );
           onReplanNeeded?.();
         } finally {
           setReplanning(false);
         }
       }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Connection error. Please try again." },
-      ]);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId
+            ? {
+                ...msg,
+                content: "Connection error. Please try again.",
+                isPending: false,
+              }
+            : msg,
+        ),
+      );
+      setCurrentSessionId(null);
+      setPendingAssistantId(null);
     } finally {
       setLoading(false);
     }
@@ -233,7 +348,7 @@ export default function ChatPanel({
       className={`w-full min-w-0 flex flex-col ${fullHeight ? "h-full" : "h-150"}`}
     >
       {showConversation ? (
-        <div className="relative flex-1 min-h-0">
+        <div className="relative flex-1 min-h-0 flex flex-col">
           {replanning && (
             <div className="absolute right-4 top-2 z-10 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
               <RefreshCw className="h-3 w-3 animate-spin" />
@@ -241,11 +356,11 @@ export default function ChatPanel({
             </div>
           )}
 
-          <div ref={scrollRef} className="relative flex-1 min-h-0 h-full">
+          <div className="relative flex-1 min-h-0">
             <Conversation>
-              <ConversationContent className="pt-4">
+              <ConversationContent ref={scrollRef} className="pt-4">
                 {messages.map((msg, i) => (
-                  <Message from={msg.role} key={`${msg.role}-${i}`}>
+                  <Message from={msg.role} key={msg.id}>
                     <MessageContent>
                       <MessageResponse from={msg.role}>
                         {msg.content}
@@ -262,60 +377,122 @@ export default function ChatPanel({
                         </Attachments>
                       )}
 
-                      {msg.role === "assistant" && (
-                        <>
-                          <Reasoning
-                            open={Boolean(openReasoning[i])}
-                            onToggle={() =>
-                              setOpenReasoning((prev) => ({
-                                ...prev,
-                                [i]: !prev[i],
-                              }))
-                            }
-                            isStreaming={loading && i === messages.length - 1}
-                          >
-                            Profile loaded, intent classified, financial context
-                            reviewed, and recommendation generated from the
-                            latest user profile.
-                          </Reasoning>
+                      {msg.role === "assistant" &&
+                        (() => {
+                          // If message has crew events, use them; otherwise show loading state
+                          const events =
+                            msg.crewEvents ||
+                            (loading && i === messages.length - 1
+                              ? crewEvents
+                              : []);
+                          const summary = summarizeCrewEvents(events);
+                          const isStreaming = msg.isPending === true;
 
-                          <Task title="Agent Progress">
-                            <TaskItem
-                              label="Read profile and chat context"
-                              status="completed"
-                            />
-                            <TaskItem
-                              label="Run financial reasoning"
-                              status={
-                                loading && i === messages.length - 1
-                                  ? "in_progress"
-                                  : "completed"
-                              }
-                            />
-                            <TaskItem
-                              label="Return response and replan signal"
-                              status={
-                                msg.triggered_replan ? "completed" : "pending"
-                              }
-                            />
-                          </Task>
+                          return (
+                            <>
+                              <Reasoning
+                                open={Boolean(openReasoning[i])}
+                                onToggle={() =>
+                                  setOpenReasoning((prev) => ({
+                                    ...prev,
+                                    [i]: !prev[i],
+                                  }))
+                                }
+                                isStreaming={isStreaming}
+                              >
+                                {formatReasoningText(summary)}
+                              </Reasoning>
 
-                          <Tool
-                            title="Tool invocation details"
-                            open={Boolean(openTool[i])}
-                            onToggle={() =>
-                              setOpenTool((prev) => ({
-                                ...prev,
-                                [i]: !prev[i],
-                              }))
-                            }
-                          >
-                            Backend currently returns `reply`, `needs_replan`,
-                            and `profile_updates`. Per-tool traces are not
-                            exposed yet.
-                          </Tool>
-                        </>
-                      )}
+                              <Task title="Agent Progress">
+                                {isStreaming && (
+                                  <TaskItem
+                                    label={
+                                      replanning
+                                        ? "Regenerating financial plan..."
+                                        : isConnected
+                                          ? "Connected to event stream"
+                                          : "Connecting to event stream"
+                                    }
+                                    status={
+                                      replanning
+                                        ? "in_progress"
+                                        : isConnected
+                                          ? "completed"
+                                          : "in_progress"
+                                    }
+                                  />
+                                )}
+                                {summary.tasks.length === 0 && isStreaming && (
+                                  <TaskItem
+                                    label="Initializing..."
+                                    status="in_progress"
+                                  />
+                                )}
+                                {summary.tasks.map((task, idx) => (
+                                  <TaskItem
+                                    key={`task-${idx}`}
+                                    label={task.name}
+                                    status={
+                                      task.status === "started"
+                                        ? "in_progress"
+                                        : task.status === "completed"
+                                          ? "completed"
+                                          : "pending"
+                                    }
+                                  />
+                                ))}
+                              </Task>
+
+                              <Tool
+                                title="Tool invocations"
+                                open={Boolean(openTool[i])}
+                                onToggle={() =>
+                                  setOpenTool((prev) => ({
+                                    ...prev,
+                                    [i]: !prev[i],
+                                  }))
+                                }
+                              >
+                                {summary.tools.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {isStreaming
+                                      ? "Waiting for tool calls..."
+                                      : "No tools were used for this response."}
+                                  </p>
+                                ) : (
+                                  <div className="space-y-2 text-xs">
+                                    {summary.tools.map((tool, idx) => (
+                                      <div
+                                        key={`tool-${idx}`}
+                                        className="border-l-2 border-primary/30 pl-2"
+                                      >
+                                        <div className="font-semibold text-primary">
+                                          {tool.name}
+                                        </div>
+                                        {tool.input && (
+                                          <div className="text-muted-foreground mt-0.5">
+                                            <span className="font-medium">
+                                              Input:
+                                            </span>{" "}
+                                            {tool.input}
+                                          </div>
+                                        )}
+                                        {tool.output && (
+                                          <div className="text-muted-foreground mt-0.5">
+                                            <span className="font-medium">
+                                              Output:
+                                            </span>{" "}
+                                            {tool.output}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </Tool>
+                            </>
+                          );
+                        })()}
                     </MessageContent>
                   </Message>
                 ))}

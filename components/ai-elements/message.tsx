@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export function Message({
   from,
@@ -27,6 +29,7 @@ export function MessageResponse({
   from: "user" | "assistant";
   children: React.ReactNode;
 }) {
+  const isMarkdownText = typeof children === "string";
   return (
     <div
       className={cn(
@@ -36,7 +39,47 @@ export function MessageResponse({
           : "border border-border/50 bg-muted/40 text-foreground",
       )}
     >
-      {children}
+      {isMarkdownText ? (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+            ul: ({ children }) => <ul className="mb-2 list-disc pl-5 last:mb-0">{children}</ul>,
+            ol: ({ children }) => <ol className="mb-2 list-decimal pl-5 last:mb-0">{children}</ol>,
+            li: ({ children }) => <li className="mb-1">{children}</li>,
+            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+            a: ({ href, children }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  "underline underline-offset-4",
+                  from === "user" ? "text-primary-foreground/90" : "text-primary",
+                )}
+              >
+                {children}
+              </a>
+            ),
+            code: ({ children }) => (
+              <code
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-xs",
+                  from === "user"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-muted text-foreground",
+                )}
+              >
+                {children}
+              </code>
+            ),
+          }}
+        >
+          {children}
+        </ReactMarkdown>
+      ) : (
+        children
+      )}
     </div>
   );
 }
