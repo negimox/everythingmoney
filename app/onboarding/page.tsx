@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import {
@@ -283,7 +283,7 @@ function InputWrapper({
 
 // ── Main Component ───────────────────────────────────────────
 
-export default function OnboardingPage() {
+function OnboardingPageContent() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -1707,5 +1707,19 @@ export default function OnboardingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <OnboardingPageContent />
+    </Suspense>
   );
 }

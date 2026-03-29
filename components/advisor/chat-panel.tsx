@@ -13,9 +13,14 @@ interface Message {
 interface ChatPanelProps {
   userId: string;
   onReplanNeeded?: () => void;
+  fullHeight?: boolean;
 }
 
-export default function ChatPanel({ userId, onReplanNeeded }: ChatPanelProps) {
+export default function ChatPanel({
+  userId,
+  onReplanNeeded,
+  fullHeight = false,
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +45,10 @@ export default function ChatPanel({ userId, onReplanNeeded }: ChatPanelProps) {
 
   // Auto-scroll on new messages
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
   const sendMessage = async () => {
@@ -94,7 +102,7 @@ export default function ChatPanel({ userId, onReplanNeeded }: ChatPanelProps) {
   };
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card flex flex-col h-[500px]">
+    <div className={`rounded-xl border border-border/50 bg-card flex flex-col ${fullHeight ? "h-full" : "h-[500px]"}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2">
@@ -114,9 +122,12 @@ export default function ChatPanel({ userId, onReplanNeeded }: ChatPanelProps) {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
             <Bot className="w-10 h-10 mb-3 text-primary/30" />
-            <p className="text-sm font-medium">Ask me anything about your finances</p>
+            <p className="text-sm font-medium">
+              Ask me anything about your finances
+            </p>
             <p className="text-xs mt-1">
-              Try: &quot;What if I retire at 55?&quot; or &quot;How can I save more tax?&quot;
+              Try: &quot;What if I retire at 55?&quot; or &quot;How can I save
+              more tax?&quot;
             </p>
           </div>
         )}

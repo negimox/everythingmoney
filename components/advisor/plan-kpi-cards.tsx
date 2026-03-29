@@ -34,7 +34,8 @@ function formatINR(val: number): string {
 }
 
 export default function PlanKPICards({ plan }: PlanKPICardsProps) {
-  const hasInsuranceGap = plan.insurance_gap.term_gap > 0 || plan.insurance_gap.health_gap > 0;
+  const hasInsuranceGap =
+    plan.insurance_gap.term_gap > 0 || plan.insurance_gap.health_gap > 0;
 
   const cards = [
     {
@@ -82,7 +83,7 @@ export default function PlanKPICards({ plan }: PlanKPICardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
@@ -92,13 +93,19 @@ export default function PlanKPICards({ plan }: PlanKPICardsProps) {
               hover:border-border transition-all hover:shadow-sm"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className={`w-8 h-8 rounded-lg ${card.bg} flex items-center justify-center`}>
+              <div
+                className={`w-8 h-8 rounded-lg ${card.bg} flex items-center justify-center`}
+              >
                 <Icon className={`w-4 h-4 ${card.color}`} />
               </div>
-              <span className="text-xs text-muted-foreground">{card.label}</span>
+              <span className="text-xs text-muted-foreground">
+                {card.label}
+              </span>
             </div>
             <p className="text-lg font-semibold font-display">{card.value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{card.description}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {card.description}
+            </p>
           </div>
         );
       })}

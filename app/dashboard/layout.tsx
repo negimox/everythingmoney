@@ -1,60 +1,65 @@
+"use client";
+
 import React from "react";
-import { cookies } from "next/headers";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { MobileHeader } from "@/components/dashboard/mobile-header";
 import { LeftSidebar } from "@/components/dashboard/sidebar/left-sidebar";
-import { RightSidebar } from "@/components/dashboard/sidebar/right-sidebar";
 import { OnboardingGuard } from "@/components/advisor/onboarding-guard";
-import mockDataJson from "@/mock.json";
-import type { MockData } from "@/types/dashboard";
+import {
+  DashboardProvider,
+  useDashboardView,
+} from "@/components/advisor/dashboard-context";
+import { DashboardHeader } from "@/components/advisor/dashboard-header";
 
-const mockData = mockDataJson as unknown as MockData;
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
+  const { activeView } = useDashboardView();
+  const isChat = activeView === "chat";
 
-export default async function DashboardLayout({
+  return (
+    <div className="flex flex-col h-screen w-full overflow-hidden">
+      <DashboardHeader />
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - hidden in chat mode */}
+        {!isChat && (
+          <SidebarProvider
+            defaultOpen={true}
+            defaultWidth="14rem"
+            cookieName="sidebar:state"
+          >
+            <LeftSidebar />
+            <SidebarInset>
+              <main className="flex-1 flex flex-col min-w-0 overflow-auto">
+                <div className="flex-1 p-4 md:p-6 max-w-full overflow-x-hidden">
+                  {children}
+                </div>
+              </main>
+            </SidebarInset>
+          </SidebarProvider>
+        )}
+
+        {/* Full width in chat mode */}
+        {isChat && (
+          <main className="flex-1 flex flex-col min-w-0 overflow-auto">
+            <div className="flex-1 p-4 md:p-6 max-w-full overflow-x-hidden">
+              {children}
+            </div>
+          </main>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const leftSidebarState = cookieStore.get("sidebar:state");
-  const rightSidebarState = cookieStore.get("sidebar:right_state");
-  const leftSidebarWidth = cookieStore.get("sidebar:width");
-  const rightSidebarWidth = cookieStore.get("sidebar:right_width");
-
-  const defaultOpenLeft = leftSidebarState ? leftSidebarState.value === "true" : true;
-  const defaultOpenRight = rightSidebarState ? rightSidebarState.value === "true" : true;
-  const defaultWidthLeft = leftSidebarWidth ? leftSidebarWidth.value : "18rem";
-  const defaultWidthRight = rightSidebarWidth ? rightSidebarWidth.value : "22rem";
-
   return (
     <OnboardingGuard>
-      {/* Outer Provider for Left Sidebar */}
-      <SidebarProvider defaultOpen={defaultOpenLeft} defaultWidth={defaultWidthLeft} cookieName="sidebar:state">
-        <LeftSidebar />
-        
-        {/* Main Content Area + Right Sidebar Scope */}
-        <SidebarInset>
-          {/* Mobile Header - only visible on mobile */}
-          <MobileHeader mockData={mockData} />
-
-          <div className="flex flex-1 h-full overflow-hidden">
-             {/* Inner Provider for Right Sidebar */}
-             <SidebarProvider 
-                defaultOpen={defaultOpenRight} 
-                defaultWidth={defaultWidthRight}
-                cookieName="sidebar:right_state"
-                className="flex-1 flex flex-row h-full overflow-hidden"
-             >
-                <main className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto relative">
-                   <div className="p-4 md:p-6 lg:p-8 flex-1">
-                      {children}
-                   </div>
-                </main>
-                <RightSidebar />
-             </SidebarProvider>
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+      <DashboardProvider>
+        <DashboardLayoutInner>{children}</DashboardLayoutInner>
+      </DashboardProvider>
     </OnboardingGuard>
   );
 }

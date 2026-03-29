@@ -4,12 +4,21 @@ import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, FileText } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import PlanKPICards from "@/components/advisor/plan-kpi-cards";
 import TaxComparison from "@/components/advisor/tax-comparison";
 import InsuranceGap from "@/components/advisor/insurance-gap";
-import PlanTimeline from "@/components/advisor/plan-timeline";
 import Recommendations from "@/components/advisor/recommendations";
 import ChatPanel from "@/components/advisor/chat-panel";
+import AssetAllocationChart from "@/components/advisor/asset-allocation-chart";
+import MonthlyPlanCarousel from "@/components/advisor/monthly-plan-carousel";
+import { useDashboardView } from "@/components/advisor/dashboard-context";
 
 interface FinancialPlan {
   summary: string;
@@ -37,6 +46,7 @@ export default function AdvisorDashboard() {
   const [plan, setPlan] = useState<FinancialPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { activeView } = useDashboardView();
 
   // Resolve Clerk → MongoDB user
   useEffect(() => {
@@ -47,7 +57,6 @@ export default function AdvisorDashboard() {
     }
 
     const resolveUser = async () => {
-      // Initialization / Lookup by Clerk ID
       try {
         const payload = {
           clerk_user_id: user.id,
@@ -61,7 +70,7 @@ export default function AdvisorDashboard() {
           body: JSON.stringify(payload),
         });
         const data = await res.json();
-        
+
         if (data.found && data.user_id) {
           localStorage.setItem("advisor_user_id", data.user_id);
         }
@@ -69,7 +78,6 @@ export default function AdvisorDashboard() {
         if (data.onboarding_completed) {
           setUserId(data.user_id);
         } else {
-          // Redirect to onboarding
           router.replace("/onboarding");
         }
       } catch {
@@ -84,18 +92,19 @@ export default function AdvisorDashboard() {
   // Fetch plan
   const fetchPlan = useCallback(async () => {
     if (!userId) return;
-    
-    // Set a timeout to cancel polling if component unmounts
+
     let timeoutId: NodeJS.Timeout;
 
     try {
       const res = await fetch(`/api/advisor/plan?user_id=${userId}`);
       if (res.status === 404) {
-        setError("Generating your personalized financial plan... This usually takes 10-30 seconds.");
+        setError(
+          "Generating your personalized financial plan... This usually takes 10-30 seconds.",
+        );
         timeoutId = setTimeout(fetchPlan, 5000);
         return;
       }
-      
+
       const data = await res.json();
       if (data.success && data.plan?.plan) {
         setPlan(data.plan.plan);
@@ -118,7 +127,9 @@ export default function AdvisorDashboard() {
     if (userId) {
       const p = fetchPlan();
       if (p instanceof Promise) {
-        p.then(c => { if (c) cancel = c; });
+        p.then((c) => {
+          if (c) cancel = c;
+        });
       }
     }
     return () => cancel();
@@ -147,7 +158,8 @@ export default function AdvisorDashboard() {
           <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto" />
           <h2 className="text-lg font-semibold">No Financial Plan Yet</h2>
           <p className="text-sm text-muted-foreground">
-            {error || "Complete the onboarding to generate your personalized financial plan."}
+            {error ||
+              "Complete the onboarding to generate your personalized financial plan."}
           </p>
           <button
             onClick={() => router.push("/onboarding")}
@@ -162,47 +174,69 @@ export default function AdvisorDashboard() {
     );
   }
 
+  // Chat View - Full width
+  if (activeView === "chat") {
+    return (
+      <div className="max-w-3xl mx-auto h-[calc(100vh-120px)]">
+        <ChatPanel userId={userId!} onReplanNeeded={fetchPlan} fullHeight />
+      </div>
+    );
+  }
+
+  // Dashboard View
   return (
-    <div className="space-y-6 pb-8">
-      {/* Plan Header */}
+    <div className="space-y-6 pb-8 w-full overflow-x-hidden">
+      {/* Plan Summary */}
       <div>
-        <h1 className="text-2xl font-bold">Your Financial Plan</h1>
-        <p className="text-sm text-muted-foreground mt-1">{plan.summary}</p>
+        <h1 className="text-xl font-bold mb-1">Your Financial Plan</h1>
+        <p className="text-sm text-muted-foreground">{plan.summary}</p>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards Row */}
       <PlanKPICards plan={plan} />
 
-      {/* Main 2-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Plan details */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Tax Comparison */}
-          <TaxComparison tax={plan.tax_comparison} />
+      {/* Monthly Investment Plan - Horizontal Carousel */}
+      <Card className="overflow-hidden w-full">
+        <CardHeader className="border-b">
+          <CardTitle className="text-base">Monthly Investment Plan</CardTitle>
+          <CardDescription>
+            Scroll to view your personalized SIP schedule
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4 overflow-hidden">
+          <MonthlyPlanCarousel monthlyPlan={plan.monthly_plan} />
+        </CardContent>
+      </Card>
 
-          {/* Monthly Plan Timeline */}
-          <PlanTimeline monthlyPlan={plan.monthly_plan} />
-
-          {/* Insurance Gaps */}
-          <InsuranceGap insurance={plan.insurance_gap} />
-
-          {/* Recommendations + Educational Notes */}
-          <Recommendations
-            recommendations={plan.key_recommendations}
-            educationalNotes={plan.educational_notes}
-            disclaimer={plan.disclaimer}
-          />
-        </div>
-
-        {/* Right: Chat Panel */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-4">
-            <ChatPanel
-              userId={userId!}
-              onReplanNeeded={fetchPlan}
+      {/* Two Column Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Asset Allocation Card */}
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-base">Asset Allocation</CardTitle>
+            <CardDescription>Current vs Target breakdown</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <AssetAllocationChart
+              current={plan.asset_allocation_current}
+              target={plan.asset_allocation_target}
             />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+
+        {/* Tax Comparison */}
+        <TaxComparison tax={plan.tax_comparison} />
+      </div>
+
+      {/* Insurance and Recommendations */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <InsuranceGap insurance={plan.insurance_gap} />
+
+        <Recommendations
+          recommendations={plan.key_recommendations}
+          educationalNotes={plan.educational_notes}
+          disclaimer={plan.disclaimer}
+        />
       </div>
     </div>
   );

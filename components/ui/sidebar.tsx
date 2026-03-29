@@ -99,7 +99,7 @@ function SidebarProvider({
       // This sets the cookie to keep the sidebar state.
       document.cookie = `${cookieName}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
-    [setOpenProp, open, cookieName]
+    [setOpenProp, open, cookieName],
   );
 
   // Helper to toggle the sidebar.
@@ -141,7 +141,17 @@ function SidebarProvider({
       isDraggingRail,
       setIsDraggingRail,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, width, isDraggingRail]
+    [
+      state,
+      open,
+      setOpen,
+      isMobile,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+      width,
+      isDraggingRail,
+    ],
   );
 
   return (
@@ -158,7 +168,7 @@ function SidebarProvider({
           }
           className={cn(
             "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
-            className
+            className,
           )}
           {...props}
         >
@@ -181,7 +191,8 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile, isDraggingRail } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, isDraggingRail } =
+    useSidebar();
 
   if (collapsible === "none") {
     return (
@@ -189,7 +200,7 @@ function Sidebar({
         data-slot="sidebar"
         className={cn(
           "text-sidebar-foreground flex h-full w-(--sidebar-width) flex-col",
-          className
+          className,
         )}
         {...props}
       >
@@ -249,7 +260,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+          "fixed top-14 bottom-0 z-10 hidden h-[calc(100vh-3.5rem)] w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
           side === "left"
             ? "left-sides group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-sides group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -258,7 +269,7 @@ function Sidebar({
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
           "group-data-[dragging=true]:duration-0! group-data-[dragging=true]_*:!duration-0",
-          className
+          className,
         )}
         {...props}
       >
@@ -297,29 +308,37 @@ function SidebarTrigger({
   );
 }
 
-function SidebarRail({ className, direction = "right", enableDrag = true, ...props }: React.ComponentProps<"button"> & { direction?: "left" | "right", enableDrag?: boolean }) {
+function SidebarRail({
+  className,
+  direction = "right",
+  enableDrag = true,
+  ...props
+}: React.ComponentProps<"button"> & {
+  direction?: "left" | "right";
+  enableDrag?: boolean;
+}) {
   const { toggleSidebar, setWidth, state, width, setIsDraggingRail } =
-		useSidebar();
+    useSidebar();
 
-	const dragRefCurrent = React.useRef<HTMLButtonElement>(null);
-	const { dragRef, handleMouseDown } = useSidebarResize({
-		direction,
-		enableDrag,
-		onResize: setWidth,
-		onToggle: toggleSidebar,
-		currentWidth: width,
-		isCollapsed: state === "collapsed",
-		minResizeWidth: MIN_SIDEBAR_WIDTH,
-		maxResizeWidth: MAX_SIDEBAR_WIDTH,
-		setIsDraggingRail,
-		widthCookieName: "sidebar:width",
-		widthCookieMaxAge: 60 * 60 * 24 * 7, // 1 week
-	});
+  const dragRefCurrent = React.useRef<HTMLButtonElement>(null);
+  const { dragRef, handleMouseDown } = useSidebarResize({
+    direction,
+    enableDrag,
+    onResize: setWidth,
+    onToggle: toggleSidebar,
+    currentWidth: width,
+    isCollapsed: state === "collapsed",
+    minResizeWidth: MIN_SIDEBAR_WIDTH,
+    maxResizeWidth: MAX_SIDEBAR_WIDTH,
+    setIsDraggingRail,
+    widthCookieName: "sidebar:width",
+    widthCookieMaxAge: 60 * 60 * 24 * 7, // 1 week
+  });
 
-	const combinedRef = React.useMemo(
-		() => mergeButtonRefs([dragRefCurrent, dragRef]),
-		[dragRef]
-	);
+  const combinedRef = React.useMemo(
+    () => mergeButtonRefs([dragRefCurrent, dragRef]),
+    [dragRef],
+  );
 
   return (
     <button
@@ -337,7 +356,7 @@ function SidebarRail({ className, direction = "right", enableDrag = true, ...pro
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "hover:group-data-[collapsible=offcanvas]:bg-sidebar",
-        className
+        className,
       )}
       {...props}
     />
@@ -349,9 +368,9 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-background relative flex w-full flex-1 flex-col",
+        "bg-background relative flex min-w-0 flex-1 flex-col",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
-        className
+        className,
       )}
       {...props}
     />
@@ -379,7 +398,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
       data-sidebar="header"
       className={cn(
         "flex flex-col gap-2 p-2 rounded-lg bg-sidebar ring-2 ring-sidebar-foreground/[0.025]",
-        className
+        className,
       )}
       {...props}
     />
@@ -418,7 +437,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-sidebar="content"
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-2 group-data-[collapsible=icon]:overflow-hidden",
-        className
+        className,
       )}
       {...props}
     />
@@ -432,7 +451,7 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
       data-sidebar="group"
       className={cn(
         "relative flex w-full min-w-0 flex-col p-2 bg-sidebar max-md:rounded-none rounded-lg ring-2 ring-sidebar-foreground/[0.025]",
-        className
+        className,
       )}
       {...props}
     />
@@ -453,7 +472,7 @@ function SidebarGroupLabel({
       className={cn(
         "uppercase text-sidebar-foreground ring-sidebar-ring flex h-10 shrink-0 items-center rounded-md px-2 text-xs font-medium outline-hidden transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
         "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
-        className
+        className,
       )}
       {...props}
     />
@@ -476,7 +495,7 @@ function SidebarGroupAction({
         // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 md:after:hidden",
         "group-data-[collapsible=icon]:hidden",
-        className
+        className,
       )}
       {...props}
     />
@@ -539,7 +558,7 @@ const sidebarMenuButtonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
+  },
 );
 
 function SidebarMenuButton({
@@ -617,7 +636,7 @@ function SidebarMenuAction({
         "group-data-[collapsible=icon]:hidden",
         showOnHover &&
           "peer-data-[active=true]/menu-button:text-sidebar-accent-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0",
-        className
+        className,
       )}
       {...props}
     />
@@ -636,7 +655,7 @@ function SidebarMenuBadge({
         "text-sidebar-foreground pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums select-none",
         "peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground",
         "group-data-[collapsible=icon]:hidden",
-        className
+        className,
       )}
       {...props}
     />
@@ -689,7 +708,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
       className={cn(
         "border-sidebar-border mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l px-2.5 py-0.5",
         "group-data-[collapsible=icon]:hidden",
-        className
+        className,
       )}
       {...props}
     />
@@ -735,7 +754,7 @@ function SidebarMenuSubButton({
         size === "sm" && "text-xs",
         size === "md" && "text-sm",
         "group-data-[collapsible=icon]:hidden",
-        className
+        className,
       )}
       {...props}
     />
