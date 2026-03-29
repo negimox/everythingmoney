@@ -105,7 +105,7 @@ export function LeftSidebar({
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="p-2">
+      {/* <SidebarFooter className="p-2">
         <SidebarGroup>
           <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
             <Bullet className="mr-2" />
@@ -117,7 +117,7 @@ export function LeftSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-      </SidebarFooter>
+      </SidebarFooter> */}
       <SidebarRail />
     </Sidebar>
   );

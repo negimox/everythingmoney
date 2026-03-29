@@ -5,13 +5,11 @@ import { Lightbulb, CheckCircle } from "lucide-react";
 interface RecommendationsProps {
   recommendations: string[];
   educationalNotes: string[];
-  disclaimer: string;
 }
 
 export default function Recommendations({
   recommendations,
   educationalNotes,
-  disclaimer,
 }: RecommendationsProps) {
   return (
     <div className="space-y-4">
@@ -27,8 +25,10 @@ export default function Recommendations({
               key={i}
               className="flex items-start gap-3 rounded-lg bg-muted/30 p-3 text-sm"
             >
-              <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary
-                text-xs font-semibold flex items-center justify-center mt-0.5">
+              <span
+                className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary
+                text-xs font-semibold flex items-center justify-center mt-0.5"
+              >
                 {i + 1}
               </span>
               <p className="leading-relaxed">{rec}</p>
@@ -46,18 +46,16 @@ export default function Recommendations({
           </h3>
           <ul className="space-y-2 text-sm text-muted-foreground">
             {educationalNotes.map((note, i) => (
-              <li key={i} className="leading-relaxed pl-4 border-l-2 border-amber-500/20">
+              <li
+                key={i}
+                className="leading-relaxed pl-4 border-l-2 border-amber-500/20"
+              >
                 {note}
               </li>
             ))}
           </ul>
         </div>
       )}
-
-      {/* SEBI Disclaimer */}
-      <div className="rounded-lg bg-muted/40 p-4 text-xs text-muted-foreground leading-relaxed">
-        {disclaimer}
-      </div>
     </div>
   );
 }

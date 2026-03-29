@@ -3,7 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles, FileText } from "lucide-react";
+import {
+  Loader2,
+  Sparkles,
+  FileText,
+  LucideMessageCircleWarning,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -37,7 +42,10 @@ interface FinancialPlan {
   confidence_notes: string[];
   scenario_type: string;
   disclaimer: string;
+  fund_options?: Record<string, any[]>;
 }
+
+import AdvisedInvestments from "@/components/advisor/advised-investments";
 
 export default function AdvisorDashboard() {
   const { user, isLoaded } = useUser();
@@ -174,18 +182,24 @@ export default function AdvisorDashboard() {
     );
   }
 
-  // Chat View - Full width
-  if (activeView === "chat") {
-    return (
-      <div className="w-full h-[calc(100vh-120px)] min-w-0">
-        <ChatPanel userId={userId!} onReplanNeeded={fetchPlan} fullHeight />
-      </div>
-    );
-  }
-
   // Dashboard View
   return (
     <div className="space-y-6 pb-8 w-full overflow-x-hidden">
+      {/* Important Disclaimer */}
+      <Card className="bg-amber-500/10 border-amber-500/30 text-amber-200 shadow-none">
+        <CardContent className="p-4 flex items-start gap-4">
+          <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+            <LucideMessageCircleWarning className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs leading-relaxed opacity-80">
+              {plan.disclaimer ||
+                "Investment recommendations provided are for educational purposes only. Past performance is not indicative of future results. Consult with a certified financial planner before making investment decisions."}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Plan Summary */}
       <div>
         <h1 className="text-xl font-bold mb-1">Your Financial Plan</h1>
@@ -207,6 +221,11 @@ export default function AdvisorDashboard() {
           <MonthlyPlanCarousel monthlyPlan={plan.monthly_plan} />
         </CardContent>
       </Card>
+
+      {/* Advised Investments */}
+      {plan.fund_options && (
+        <AdvisedInvestments fundOptions={plan.fund_options} />
+      )}
 
       {/* Two Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -235,7 +254,6 @@ export default function AdvisorDashboard() {
         <Recommendations
           recommendations={plan.key_recommendations}
           educationalNotes={plan.educational_notes}
-          disclaimer={plan.disclaimer}
         />
       </div>
     </div>

@@ -230,7 +230,7 @@ export default function ChatPanel({
 
   return (
     <div
-      className={`w-full min-w-0 flex flex-col ${fullHeight ? "h-full" : "h-[600px]"}`}
+      className={`w-full min-w-0 flex flex-col ${fullHeight ? "h-full" : "h-150"}`}
     >
       {showConversation ? (
         <div className="relative flex-1 min-h-0">
@@ -241,7 +241,7 @@ export default function ChatPanel({
             </div>
           )}
 
-          <div ref={scrollRef} className="relative flex-1 min-h-0">
+          <div ref={scrollRef} className="relative flex-1 min-h-0 h-full">
             <Conversation>
               <ConversationContent className="pt-4">
                 {messages.map((msg, i) => (

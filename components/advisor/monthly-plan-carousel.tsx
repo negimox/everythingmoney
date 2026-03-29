@@ -133,11 +133,11 @@ function MonthCard({
       onClick={onClick}
       style={{ scrollSnapAlign: "center" }}
       className={cn(
-        "relative flex-shrink-0 p-4 rounded-xl border-2 transition-all duration-300 text-left",
+        "relative shrink-0 p-4 rounded-xl border-2 transition-all duration-300 text-left cursor-pointer",
         // Active state - larger and prominent
         isActive
-          ? "w-40 border-primary bg-primary/10 shadow-xl z-10"
-          : "w-28 border-border/50 bg-card hover:border-primary/50 opacity-50",
+          ? "w-48 border-primary bg-primary/10 shadow-xl z-10 scale-105"
+          : "w-32 border-border/50 bg-card hover:border-primary/50 opacity-50",
         // Current month highlight
         isCurrent &&
           !isActive &&
@@ -485,7 +485,7 @@ export default function MonthlyPlanCarousel({
         {/* Carousel Container */}
         <div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide px-4 py-4"
+          className="flex justify-start lg:justify-center gap-6 overflow-x-auto scrollbar-hide px-4 py-8"
           style={{ scrollSnapType: "x mandatory" }}
         >
           {monthlyPlan.map((entry, index) => (

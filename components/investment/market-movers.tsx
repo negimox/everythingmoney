@@ -67,7 +67,7 @@ export function MarketMovers({ gainers, losers, active }: MarketMoversProps) {
       <CardContent className="p-0 flex-1 overflow-y-auto">
         <div className="flex flex-col">
           {getActiveList().map((item) => (
-            <Link href={`/stock/${item.id}`} key={item.id}>
+            <Link href={`/dashboard/stock/${item.id}`} key={item.id}>
               <div className="flex items-center justify-between p-3 border-b border-border/30 hover:bg-muted/30 transition-colors group">
                 <div className="flex items-center gap-3 min-w-0">
                   <StockLogo symbol={item.symbol} name={item.name} type="NSE" className="w-8 h-8 rounded-full border border-border/60 shrink-0 bg-white/5 object-contain overflow-hidden" />

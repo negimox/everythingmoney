@@ -623,7 +623,7 @@ function WatchlistContent() {
                                                         return (
                                                             <div
                                                                 key={item.id}
-                                                                onClick={() => router.push(`/stock/${item.id}`)}
+                                                                onClick={() => router.push(`/dashboard/stock/${item.id}`)}
                                                                 className="grid grid-cols-[2fr_1.2fr_0.9fr_0.9fr_1fr_1fr_1fr_1.1fr] gap-3 items-center px-4 py-2.5 hover:bg-muted/30 transition-colors border-b border-border/20 last:border-b-0 group cursor-pointer"
                                                             >
                                                                 {/* Symbol + tag */}

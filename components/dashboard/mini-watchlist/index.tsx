@@ -1212,7 +1212,7 @@ function MiniWatchlistContent() {
                                                         key={item.id}
                                                         onMouseEnter={() => setHoveredId(item.id)}
                                                         onMouseLeave={() => setHoveredId(null)}
-                                                        onClick={() => router.push(`/stock/${item.id}`)}
+                                                        onClick={() => router.push(`/dashboard/stock/${item.id}`)}
                                                         onDoubleClick={(e) => {
                                                             e.stopPropagation();
                                                             handleCreateSection();

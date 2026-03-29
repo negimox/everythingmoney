@@ -39,6 +39,8 @@ function getCurrencySymbol(type: string): string {
         case "NSE":
         case "BSE":
         case "COMMODITY":
+        case "FUND":
+        case "AMFI":
             return "₹";
         case "US":
         case "CRYPTO":
@@ -75,22 +77,52 @@ export default function StockAnalysisPage({ params }: { params: Promise<{ id: st
                 const type = parts[0].toLowerCase();
                 const symbol = parts.slice(1).join('-'); // Handle symbols with hyphens
 
-                const response = await fetch(`/api/watchlist/${type}`);
-                const allData = await response.json();
+                if (type === "fund" || type === "amfi") {
+                    // Try to fetch from mfapi.in - symbol is expected to be schemeCode
+                    const response = await fetch(`https://api.mfapi.in/mf/${symbol}`);
+                    const json = await response.json();
+                    if (json.meta) {
+                        const meta = json.meta;
+                        const dataPoints = json.data;
+                        const latest = dataPoints?.[0];
+                        const prev = dataPoints?.[1];
+                        
+                        const nav = parseFloat(latest?.nav || "0");
+                        const prevNav = parseFloat(prev?.nav || "0");
+                        const change = nav - prevNav;
+                        const percent = prevNav !== 0 ? (change / prevNav) * 100 : 0;
 
-                // 1. Direct match by ID
-                let stockInfo = allData[symbol] || allData[symbol.toUpperCase()];
+                        setData({
+                            price: nav,
+                            change: change,
+                            percent: percent,
+                            name: meta.scheme_name,
+                            symbol: symbol,
+                            isin: meta.isin_growth || meta.isin_reinvestment,
+                            marketCap: meta.fund_house,
+                            volume: meta.scheme_type,
+                            high: Math.max(...(dataPoints?.slice(0, 30).map((d: any) => parseFloat(d.nav)) || [0])),
+                            low: Math.min(...(dataPoints?.slice(0, 30).map((d: any) => parseFloat(d.nav)) || [0])),
+                        });
+                    }
+                } else {
+                    const response = await fetch(`/api/watchlist/${type}`);
+                    const allData = await response.json();
 
-                // 2. Search all keys if not found
-                if (!stockInfo) {
-                    const foundKey = Object.keys(allData).find(k =>
-                        allData[k].symbol?.toUpperCase() === symbol.toUpperCase()
-                    );
-                    if (foundKey) stockInfo = allData[foundKey];
-                }
+                    // 1. Direct match by ID
+                    let stockInfo = allData[symbol] || allData[symbol.toUpperCase()];
 
-                if (stockInfo) {
-                    setData(stockInfo);
+                    // 2. Search all keys if not found
+                    if (!stockInfo) {
+                        const foundKey = Object.keys(allData).find(k =>
+                            allData[k].symbol?.toUpperCase() === symbol.toUpperCase()
+                        );
+                        if (foundKey) stockInfo = allData[foundKey];
+                    }
+
+                    if (stockInfo) {
+                        setData(stockInfo);
+                    }
                 }
             } catch (err) {
                 console.error("Error fetching stock data:", err);
@@ -104,15 +136,15 @@ export default function StockAnalysisPage({ params }: { params: Promise<{ id: st
 
     if (loading || !id) {
         return (
-            <DashboardPageLayout
-                header={{
-                    title: "Loading...",
-                    description: "Fetching stock data",
-                    icon: BracketsIcon,
-                }}
-            >
-                <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <DashboardPageLayout>
+            <div className="space-y-6">
+                <div className="flex flex-col gap-2 mb-6">
+                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                         <BracketsIcon className="w-4 h-4" /> Loading...
+                    </p>
+                    <p className="text-xs text-muted-foreground/60">Fetching stock data</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {Array.from({ length: 4 }).map((_, i) => (
                             <div key={i} className="bg-card/50 border border-border/50 rounded-xl p-4 flex flex-col gap-3">
                                 <Skeleton className="h-3 w-24" />
@@ -143,28 +175,21 @@ export default function StockAnalysisPage({ params }: { params: Promise<{ id: st
     const isPositive = change >= 0;
 
     return (
-        <DashboardPageLayout
-            header={{
-                title: (
-                    <Breadcrumb>
-                        <BreadcrumbList>
-                            <BreadcrumbItem>
-                                <BreadcrumbLink asChild>
-                                    <Link href="/watchlist">Watchlist</Link>
-                                </BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator />
-                            <BreadcrumbItem>
-                                <BreadcrumbPage>{data?.name || symbol}</BreadcrumbPage>
-                            </BreadcrumbItem>
-                        </BreadcrumbList>
-                    </Breadcrumb>
-                ),
-                description: `${type}:${symbol} • Real-time Market Data`,
-                icon: BracketsIcon,
-            }}
-        >
+        <DashboardPageLayout>
             <div className="space-y-6">
+                {/* Manual Header Rendering */}
+                <div className="flex flex-col gap-1 mb-8">
+                    {data?.name || symbol}
+                    <p className="text-sm text-muted-foreground">{type}:{symbol} • Real-time Market Data</p>
+                    <div className="mt-4">
+                      {/* Breadcrumb equivalent */}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Link href="/watchlist" className="hover:text-primary transition-colors">Watchlist</Link>
+                        <span>/</span>
+                        <span className="text-foreground font-medium">{data?.name || symbol}</span>
+                      </div>
+                    </div>
+                </div>
                 {/* Stock Header with Logo */}
                 <div className="flex items-center gap-4">
                     <StockLogo symbol={symbol} name={data?.name} type={type} />

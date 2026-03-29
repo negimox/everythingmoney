@@ -93,7 +93,7 @@ export function GlobalSearch({ variant = "default" }: { variant?: "default" | "i
 
   const handleSelect = (id: string) => {
     setOpen(false);
-    router.push(`/stock/${id}`);
+    router.push(`/dashboard/stock/${id}`);
   };
 
   const filteredData = React.useMemo(() => {
